@@ -15,3 +15,7 @@ Note that multicolor bits are interpreted differently for sprites and characters
     chars       BG:$D021  MC1:$D022  MC2:$D023  $D800+
 
 Sprites will always cover character/bitmap bits 00 and 01 (bit 0 for hires). However, sprites with 'lower' priority (their bit is set to 1 in $D01B) will be covered by bits 10 and 11 (bit 1 for hires).
+
+### TODO
+ * specify -dh for double height sprites (height 42) what pixel to take? upper or lower?
+ * specify -dw for double width sprites (width 48) what pixel to take? left or right?
