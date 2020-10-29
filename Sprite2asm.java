@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.text.DateFormat;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -19,53 +20,72 @@ public class Sprite2asm {
 
     // color specifiers
     private static final Pattern BGPATTERN = Pattern.compile("-bg([0-9a-fA-F])"); // -bgX bg (forces hires)
+    private static final Pattern FGPATTERN = Pattern.compile("-fg([0-9a-fA-F])"); // -fgX fg (forces hires)
     private static final Pattern MCPATTERN = Pattern.compile("-mc([0-9a-fA-F])([0-9a-fA-F])"); // -mcXX mc1 mc2
     // charset specifiers
     private static final Pattern CHPATTERN = Pattern.compile("-ch([0-9a-fA-F][0-9a-fA-F])"); // -chXX create charset
-
-    private Sprite2asm(String fname) {
-        srcfilename = fname;
-    }
-
-    private final String srcfilename;
+    // other specifiers
+    private static final Pattern SYPATTERN = Pattern.compile("-sy([0-9a-fA-F][0-9a-fA-F])"); // -syXX starting sprite y-offset
 
     public static void main(String[] args) throws Exception {
+        Sprite2asm instance = new Sprite2asm();
         for (String arg : args) {
-            new Sprite2asm(arg).run();
+            instance.run(arg);
         }
     }
 
-    private int pixel_width = 1; // default to hires
+    private Raster pixels;
+
+    private int pixelWidth = 1;  // defaults to hires (1=hires, 2=mc)
+    private int fgIndex = -1;    // disabled, takes prio over bgIndex
     private int bgIndex = 0;     // black, but actually defaults to transparent index
     private int mc1Index = 1;    // white
     private int mc2Index = 2;    // red
     private int chOffset = -1;   // >= 0 enables charset mode, but default is sprites
+    private int syOffset = 0;    // sprite y-offset
 
-    // pixelWidth 1: bgIndex is '0', any other color is '1' (sprite color)
+    // remaps retrieved pixel color to bit pattern
+    // pixelWidth 1: fgIndex set: fgIndex is '1', any other color is '0' (background)
+    //                 otherwise: bgIndex is '0', any other color is '1' (char/sprite color)
     // pixelWidth 2: bgIndex is '00'(0), mc1Index is '01'(1), mc2Index is '11'(3), any other is '10'(2) (sprite color)
-    private void extractSprite(Raster pixels, int xoff, int yoff, byte[] buf) {
+    //               bgIndex is '00'(0), mc1Index is '01'(1), mc2Index is '10'(2), any other is '11'(3) (char color)
+    private int remapPixel(int pixel) {
+        int b;
+        if (pixelWidth == 1) {
+            // hires
+            if (fgIndex >= 0) {
+                b = pixel == fgIndex ? 1 : 0;
+            } else {
+                b = pixel == bgIndex ? 0 : 1;
+            }
+        } else {
+            if (chOffset >= 0) {
+                // mc char
+                if (pixel == bgIndex) b = 0;
+                else if (pixel == mc1Index) b = 1;
+                else if (pixel == mc2Index) b = 2;
+                else b = 3;
+            } else {
+                // mc sprite
+                if (pixel == bgIndex) b = 0;
+                else if (pixel == mc1Index) b = 1;
+                else if (pixel == mc2Index) b = 3;
+                else b = 2;
+            }
+        }
+        return b;
+    }
+
+    private void extractObject(int xoff, int yoff, int width, int height, byte[] buf) {
         int bufoffset = 0;
         int bitcount = 0;
         byte b = 0;
-        for (int y = 0; y < 21; y++) {
-            for (int x = 0; x < 24; x += pixel_width) {
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x += pixelWidth) {
                 int pixel = pixels.getSample(x + xoff, y + yoff, 0);
-                b <<= pixel_width;
-
-                if (pixel_width == 1) {
-                    // hires
-                    if (pixel == bgIndex) b |= 0;
-                    else b |= 1;
-                } else {
-                    // mc
-                    if (pixel == bgIndex) b |= 0;
-                    else if (pixel == mc1Index) b |= 1;
-                    else if (pixel == mc2Index) b |= 3;
-                    else b |= 2;
-                }
-
-                // flush
-                bitcount += pixel_width;
+                b <<= pixelWidth;
+                b |= remapPixel(pixel);
+                bitcount += pixelWidth;
                 if (bitcount == 8) {
                     buf[bufoffset++] = b;
                     bitcount = 0;
@@ -75,61 +95,38 @@ public class Sprite2asm {
         }
     }
 
-    // pixelWidth 1: bgIndex is '0', any other color is '1' (hires color)
-    // pixelWidth 2: bgIndex is '00'(0), mc1Index is '01'(1), mc2Index is '11'(3), any other is '10'(2) (sprite color)
-    private void extractChar(Raster pixels, int xoff, int yoff, byte[] buf) {
-        int bufoffset = 0;
-        int bitcount = 0;
-        byte b = 0;
-        for (int y = 0; y < 8; y++) {
-            for (int x = 0; x < 8; x += pixel_width) {
-                int pixel = pixels.getSample(x + xoff, y + yoff, 0);
-                b <<= pixel_width;
-
-                if (pixel_width == 1) {
-                    // hires
-                    if (pixel == bgIndex) b |= 0;
-                    else b |= 1;
-                } else {
-                    // mc char
-                    if (pixel == bgIndex) b |= 0;
-                    else if (pixel == mc1Index) b |= 1;
-                    else if (pixel == mc2Index) b |= 2;
-                    else b |= 3;
-                }
-
-                // flush
-                bitcount += pixel_width;
-                if (bitcount == 8) {
-                    buf[bufoffset++] = b;
-                    bitcount = 0;
-                    b = 0;
-                }
-            }
-        }
-    }
-
-    // extract color format from string
-    private void updateColorMapping(String str) {
+    // extract formatting instructions from string
+    private void updateSettings(String str) {
         Matcher bg = BGPATTERN.matcher(str);
-        Matcher mc = MCPATTERN.matcher(str);
-        Matcher ch = CHPATTERN.matcher(str);
         if (bg.find()) { // "-bgX" sets bg index and forces hires
-            bgIndex = Integer.parseInt(bg.group(1),16);
-            pixel_width = 1;
+            bgIndex = Integer.parseInt(bg.group(1), 16);
+            pixelWidth = 1;
         }
+        Matcher fg = FGPATTERN.matcher(str);
+        fgIndex = -1;
+        if (fg.find()) { // "-fgX" sets fg index and forces hires
+            fgIndex = Integer.parseInt(fg.group(1), 16);
+            pixelWidth = 1;
+        }
+        Matcher mc = MCPATTERN.matcher(str);
         if (mc.find()) { // -mcXX sets mc1 and mc2 indices and forces mc
             mc1Index = Integer.parseInt(mc.group(1),16);
             mc2Index = Integer.parseInt(mc.group(2),16);
-            pixel_width = 2;
+            pixelWidth = 2;
         }
+        Matcher ch = CHPATTERN.matcher(str);
         chOffset = -1;
-        if (ch.find()) { // -chXX set charmap mode
+        if (ch.find()) { // -chXX sets charmap mode
             chOffset = Integer.parseInt(ch.group(1),16);
+        }
+        Matcher sy = SYPATTERN.matcher(str);
+        syOffset = 0;
+        if (sy.find()) { // -syXX starting sprite y-offset
+            syOffset = Integer.parseInt(sy.group(1),16);
         }
     }
 
-    private void run() throws IOException {
+    private void run(String srcfilename) throws IOException {
         File f = new File(srcfilename);
         BufferedImage image = ImageIO.read(f);
         int height = image.getHeight();
@@ -139,10 +136,10 @@ public class Sprite2asm {
         } else {
             // pick bg from transparent color index
             bgIndex = ((IndexColorModel)image.getColorModel()).getTransparentPixel();
-            updateColorMapping(srcfilename);
+            updateSettings(srcfilename);
 
-            System.out.format("; Sprite2asm %s %s\n", f.getName(), DateFormat.getDateTimeInstance().format(new Date()));
-            Raster pixels = image.getData();
+            System.out.format("; Sprite2asm '%s' on %s\n", f.getName(), DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.MEDIUM, Locale.ENGLISH).format(new Date()));
+            pixels = image.getData();
 
             if (chOffset >= 0) {
                 // convert characters with charset and charmap
@@ -155,12 +152,12 @@ public class Sprite2asm {
                 int emptyChar = -1; // not found
                 for (int cy = 0; cy + 8 <= height; cy += 8) {
                     for (int cx = 0; cx + 8 <= width; cx += 8) {
-                        extractChar(pixels, cx, cy, curChar);
+                        extractObject(cx, cy, 8,8, curChar);
                         int ch = findInCharset(curChar, charset, charsetSize);
                         if (ch == charsetSize) { // not found
                             if (charsetSize * 8 < charset.length) {
                                 System.arraycopy(curChar, 0, charset, charsetSize * 8, 8);
-                                if (emptyChar < 0 && !containsBits(curChar)) {
+                                if (emptyChar < 0 && !containsAnyBits(curChar)) {
                                     emptyChar = charsetSize;
                                 }
                                 charsetSize++;
@@ -187,26 +184,26 @@ public class Sprite2asm {
                     }
                 }
                 StringBuilder sb = new StringBuilder();
-                sb.append(String.format("; charset %d uniques\n", charsetSize));
+                sb.append(String.format("; charset %d bytes (%d uniques)\n", charsetSize * 8, charsetSize));
                 appendByteRows(sb, charset, charsetSize * 8, 8);
                 sb.append(String.format("; charmap %d bytes (%d x %d)\n", charmapSize, width / 8, height / 8));
                 appendByteRows(sb, charmap, charmapSize, width / 8);
                 System.out.print(sb);
                 if (charsetSize + chOffset > 256) {
                     System.err.format("WARNING: charmap overflows with %d characters; use offset -ch%02X instead\n",
-                        charsetSize + chOffset - 256, 256 - charsetSize);
+                            charsetSize + chOffset - 256, 256 - charsetSize);
                 }
             } else {
                 // convert sprites
                 int nr = 0;
                 byte[] sprite = new byte[64];
-                for (int sy = 0; sy + 21 <= height; sy += 21) {
+                for (int sy = syOffset; sy + 21 <= height; sy += 21) {
                     for (int sx = 0; sx + 24 <= width; sx += 24) {
-                        extractSprite(pixels, sx, sy, sprite);
-                        if (containsBits(sprite)) {
+                        extractObject(sx, sy, 24, 21, sprite);
+                        if (containsAnyBits(sprite)) {
                             StringBuilder sb = new StringBuilder();
                             sb.append(String.format("; %d (%d,%d)\n", nr, sx, sy));
-                            appendByteRows(sb, sprite, 64, 21);
+                            appendByteRows(sb, sprite, 64, 24);
                             System.out.print(sb);
                             nr++;
                         }
@@ -216,7 +213,7 @@ public class Sprite2asm {
         }
     }
 
-    private boolean containsBits(byte[] block) {
+    private boolean containsAnyBits(byte[] block) {
         for (byte b : block) {
             if (b != 0) {
                 return true;
