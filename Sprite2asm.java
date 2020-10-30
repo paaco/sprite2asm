@@ -4,7 +4,7 @@ import java.awt.image.IndexColorModel;
 import java.awt.image.Raster;
 import java.io.File;
 import java.io.IOException;
-import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.Locale;
@@ -35,6 +35,7 @@ public class Sprite2asm {
     }
 
     private Raster pixels;
+    private String arguments = "";
 
     private int pixelWidth = 1;  // defaults to hires (1=hires, 2=mc)
     private int fgIndex = -1;    // disabled, takes prio over bgIndex
@@ -126,7 +127,16 @@ public class Sprite2asm {
         }
     }
 
-    private void run(String srcfilename) throws IOException {
+    private void run(String arg) throws IOException {
+        if (arg.startsWith("-")) {
+            arguments += arg;
+        } else {
+            readFile(arg);
+            arguments = ""; // reset
+        }
+    }
+
+    private void readFile(String srcfilename) throws IOException {
         File f = new File(srcfilename);
         BufferedImage image = ImageIO.read(f);
         int height = image.getHeight();
@@ -135,79 +145,89 @@ public class Sprite2asm {
             System.err.format("ERROR: image should have palette\n");
         } else {
             // pick bg from transparent color index
-            bgIndex = ((IndexColorModel)image.getColorModel()).getTransparentPixel();
-            updateSettings(srcfilename);
+            bgIndex = ((IndexColorModel) image.getColorModel()).getTransparentPixel();
+            updateSettings(srcfilename + arguments);
 
-            System.out.format("; Sprite2asm '%s' on %s\n", f.getName(), DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.MEDIUM, Locale.ENGLISH).format(new Date()));
+            String header = String.format("; Sprite2asm %s'%s' on %s\n",
+                    arguments.isEmpty() ? "" : arguments + " ",
+                    f.getName(),
+                    new SimpleDateFormat("dd-MMM-yyyy HH:mm:ss", Locale.ENGLISH).format(new Date()));
             pixels = image.getData();
 
             if (chOffset >= 0) {
-                // convert characters with charset and charmap
-                // TODO: colormap from extractChar?
-                byte[] charset = new byte[8 * 256];
-                int charsetSize = 0;
-                byte[] charmap = new byte[1000]; // max full screen
-                int charmapSize = 0;
-                byte[] curChar = new byte[8];
-                int emptyChar = -1; // not found
-                for (int cy = 0; cy + 8 <= height; cy += 8) {
-                    for (int cx = 0; cx + 8 <= width; cx += 8) {
-                        extractObject(cx, cy, 8,8, curChar);
-                        int ch = findInCharset(curChar, charset, charsetSize);
-                        if (ch == charsetSize) { // not found
-                            if (charsetSize * 8 < charset.length) {
-                                System.arraycopy(curChar, 0, charset, charsetSize * 8, 8);
-                                if (emptyChar < 0 && !containsAnyBits(curChar)) {
-                                    emptyChar = charsetSize;
-                                }
-                                charsetSize++;
-                            } else {
-                                System.err.format("ERROR: aborting, more than %d uniques is not supported\n",
-                                        charset.length / 8);
-                                cy = height; // end outer loop
-                                break;
-                            }
-                        }
-                        charmap[charmapSize++] = (byte)(ch + chOffset);
-                    }
-                }
-                // if there's an empty character, move that to front
-                if (emptyChar > 0) {
-                    System.arraycopy(charset, 0, charset, emptyChar * 8, 8);
-                    Arrays.fill(charset, 0, 8, (byte) 0);
-                    for (int i = 0; i < charmapSize; i++) {
-                        if (charmap[i] == chOffset) {
-                            charmap[i] = (byte)(emptyChar + chOffset);
-                        } else if (charmap[i] == (byte)(emptyChar + chOffset)) {
-                            charmap[i] = (byte)chOffset;
-                        }
-                    }
-                }
-                StringBuilder sb = new StringBuilder();
-                sb.append(String.format("; charset %d bytes (%d uniques)\n", charsetSize * 8, charsetSize));
-                appendByteRows(sb, charset, charsetSize * 8, 8);
-                sb.append(String.format("; charmap %d bytes (%d x %d)\n", charmapSize, width / 8, height / 8));
-                appendByteRows(sb, charmap, charmapSize, width / 8);
-                System.out.print(sb);
-                if (charsetSize + chOffset > 256) {
-                    System.err.format("WARNING: charmap overflows with %d characters; use offset -ch%02X instead\n",
-                            charsetSize + chOffset - 256, 256 - charsetSize);
-                }
+                convertChars(header, width, height);
             } else {
-                // convert sprites
-                int nr = 0;
-                byte[] sprite = new byte[64];
-                for (int sy = syOffset; sy + 21 <= height; sy += 21) {
-                    for (int sx = 0; sx + 24 <= width; sx += 24) {
-                        extractObject(sx, sy, 24, 21, sprite);
-                        if (containsAnyBits(sprite)) {
-                            StringBuilder sb = new StringBuilder();
-                            sb.append(String.format("; %d (%d,%d)\n", nr, sx, sy));
-                            appendByteRows(sb, sprite, 64, 24);
-                            System.out.print(sb);
-                            nr++;
+                convertSprites(header, width, height);
+            }
+        }
+    }
+
+    // convert characters with charset and charmap
+    private void convertChars(String header, int width, int height) {
+        // TODO: colormap from extractChar?
+        byte[] charset = new byte[8 * 256];
+        int charsetSize = 0;
+        byte[] charmap = new byte[1000]; // max full screen
+        int charmapSize = 0;
+        byte[] curChar = new byte[8];
+        int emptyChar = -1; // not found
+        for (int cy = 0; cy + 8 <= height; cy += 8) {
+            for (int cx = 0; cx + 8 <= width; cx += 8) {
+                extractObject(cx, cy, 8, 8, curChar);
+                int ch = findInCharset(curChar, charset, charsetSize);
+                if (ch == charsetSize) { // not found
+                    if (charsetSize * 8 < charset.length) {
+                        System.arraycopy(curChar, 0, charset, charsetSize * 8, 8);
+                        if (emptyChar < 0 && !containsAnyBits(curChar)) {
+                            emptyChar = charsetSize;
                         }
+                        charsetSize++;
+                    } else {
+                        System.err.format("ERROR: aborting, more than %d uniques is not supported\n", charset.length / 8);
+                        cy = height; // end outer loop
+                        break;
                     }
+                }
+                charmap[charmapSize++] = (byte) (ch + chOffset);
+            }
+        }
+        // if there's an empty character, move that to front
+        if (emptyChar > 0) {
+            System.arraycopy(charset, 0, charset, emptyChar * 8, 8);
+            Arrays.fill(charset, 0, 8, (byte) 0);
+            for (int i = 0; i < charmapSize; i++) {
+                if (charmap[i] == chOffset) {
+                    charmap[i] = (byte) (emptyChar + chOffset);
+                } else if (charmap[i] == (byte) (emptyChar + chOffset)) {
+                    charmap[i] = (byte) chOffset;
+                }
+            }
+        }
+        StringBuilder sb = new StringBuilder(header);
+        sb.append(String.format("; charset %d bytes (%d uniques)\n", charsetSize * 8, charsetSize));
+        appendByteRows(sb, charset, charsetSize * 8, 8);
+        sb.append(header);
+        sb.append(String.format("; charmap %d bytes (%d x %d)\n", charmapSize, width / 8, height / 8));
+        appendByteRows(sb, charmap, charmapSize, width / 8);
+        System.out.print(sb);
+        if (charsetSize + chOffset > 256) {
+            System.err.format("WARNING: charmap overflows with %d characters; use offset -ch%02X instead\n",
+                    charsetSize + chOffset - 256, 256 - charsetSize);
+        }
+    }
+
+    private void convertSprites(String header, int width, int height) {
+        int nr = 0;
+        byte[] sprite = new byte[64];
+        for (int sy = syOffset; sy + 21 <= height; sy += 21) {
+            for (int sx = 0; sx + 24 <= width; sx += 24) {
+                extractObject(sx, sy, 24, 21, sprite);
+                if (containsAnyBits(sprite)) {
+                    StringBuilder sb = new StringBuilder(nr == 0 ? header : "");
+                    sb.append(String.format("; %d (%d,%d)\n", nr, sx, sy));
+                    appendByteRows(sb, sprite, 64, 24);
+                    System.out.print(sb);
+                    nr++;
                 }
             }
         }
