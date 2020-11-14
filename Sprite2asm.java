@@ -50,9 +50,9 @@ public class Sprite2asm {
     //                 otherwise: bgIndex is '0', any other color is '1' (char/sprite color)
     // pixelWidth 2: bgIndex is '00'(0), mc1Index is '01'(1), mc2Index is '11'(3), any other is '10'(2) (sprite color)
     //               bgIndex is '00'(0), mc1Index is '01'(1), mc2Index is '10'(2), any other is '11'(3) (char color)
-    private int remapPixel(int pixel) {
+    private int remapPixel(int pixel, int myPixelWidth) {
         int b;
-        if (pixelWidth == 1) {
+        if (myPixelWidth == 1) {
             // hires
             if (fgIndex >= 0) {
                 b = pixel == fgIndex ? 1 : 0;
@@ -77,16 +77,16 @@ public class Sprite2asm {
         return b;
     }
 
-    private void extractObject(int xoff, int yoff, int width, int height, byte[] buf) {
+    private void extractObject(int xoff, int yoff, int width, int height, byte[] buf, int myPixelWidth) {
         int bufoffset = 0;
         int bitcount = 0;
         byte b = 0;
         for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x += pixelWidth) {
+            for (int x = 0; x < width; x += myPixelWidth) {
                 int pixel = pixels.getSample(x + xoff, y + yoff, 0);
-                b <<= pixelWidth;
-                b |= remapPixel(pixel);
-                bitcount += pixelWidth;
+                b <<= myPixelWidth;
+                b |= remapPixel(pixel, myPixelWidth);
+                bitcount += myPixelWidth;
                 if (bitcount == 8) {
                     buf[bufoffset++] = b;
                     bitcount = 0;
@@ -94,6 +94,36 @@ public class Sprite2asm {
                 }
             }
         }
+    }
+
+    // Detect a hires character, with the following heuristic:
+    //   1) there are exactly 2 colors with one being bgIndex, and
+    //   2) there is at least one single width pixel
+    // Note that a 2 color character with only double width pixels will map to color bits '11' anyway
+    //  if the color is not mc1Index or mc2Index, so its binary content is the same for mc and hires!
+    private boolean isHiresChar(int xoff, int yoff) {
+        int hiresColor = -1; // starts off unknown
+        boolean pixelsDiffer = false; // start off assuming all pixels are double width
+        for (int y = 0; y < 8; y++) {
+            for (int x = 0; x < 8; x += 2) {
+                int pixel1 = pixels.getSample(x + xoff, y + yoff, 0);
+                int pixel2 = pixels.getSample(x + xoff + 1, y + yoff, 0);
+                if (hiresColor < 0 && pixel1 != bgIndex) {
+                    hiresColor = pixel1;
+                }
+                if (hiresColor < 0 && pixel2 != bgIndex) {
+                    hiresColor = pixel2;
+                }
+                if ((pixel1 != bgIndex && pixel1 != hiresColor) ||
+                    (pixel2 != bgIndex && pixel2 != hiresColor)) {
+                    return false; // 3rd color detected
+                }
+                if (pixel1 != pixel2) {
+                    pixelsDiffer = true;
+                }
+            }
+        }
+        return pixelsDiffer;
     }
 
     // extract formatting instructions from string
@@ -173,7 +203,8 @@ public class Sprite2asm {
         int emptyChar = -1; // not found
         for (int cy = 0; cy + 8 <= height; cy += 8) {
             for (int cx = 0; cx + 8 <= width; cx += 8) {
-                extractObject(cx, cy, 8, 8, curChar);
+                int detectedPixelWidth = (pixelWidth > 1 && isHiresChar(cx, cy)) ? 1 : pixelWidth;
+                extractObject(cx, cy, 8, 8, curChar, detectedPixelWidth);
                 int ch = findInCharset(curChar, charset, charsetSize);
                 if (ch == charsetSize) { // not found
                     if (charsetSize * 8 < charset.length) {
@@ -221,7 +252,7 @@ public class Sprite2asm {
         byte[] sprite = new byte[64];
         for (int sy = syOffset; sy + 21 <= height; sy += 21) {
             for (int sx = 0; sx + 24 <= width; sx += 24) {
-                extractObject(sx, sy, 24, 21, sprite);
+                extractObject(sx, sy, 24, 21, sprite, pixelWidth);
                 if (containsAnyBits(sprite)) {
                     StringBuilder sb = new StringBuilder(nr == 0 ? header : "");
                     sb.append(String.format("; %d (%d,%d)\n", nr, sx, sy));

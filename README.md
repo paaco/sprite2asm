@@ -1,6 +1,6 @@
 # Sprite2asm
 
-Sprite2asm converts PNG file assets, specifically sprite sheets and character screens to C64 assembly code.
+Sprite2asm converts 16 color indexed PNG file assets, specifically sprite sheets and character screens to C64 assembly code.
 
 ### USAGE
 
@@ -28,6 +28,7 @@ The following options can be given on the command line or put in the file name (
 
  * `-chXX`:
  convert to charset and charmap instead of sprites (bytes start at `XX`, usually `00`).
+ With multi color conversion, characters consisting of 2 colors (where one is background) that contain single pixels are still converted as hires.
 
 Options on the command line take priority over those in the file name.
 
