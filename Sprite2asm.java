@@ -21,6 +21,7 @@ public class Sprite2asm {
     // color specifiers
     private static final Pattern BGPATTERN = Pattern.compile("-bg([0-9a-fA-F])"); // -bgX bg (forces hires)
     private static final Pattern FGPATTERN = Pattern.compile("-fg([0-9a-fA-F])"); // -fgX fg (forces hires)
+    private static final Pattern CMPATTERN = Pattern.compile("-cm([0-9a-fA-F])"); // -cmX enable colormap with default color
     private static final Pattern MCPATTERN = Pattern.compile("-mc([0-9a-fA-F])([0-9a-fA-F])"); // -mcXX mc1 mc2
     // charset specifiers
     private static final Pattern CHPATTERN = Pattern.compile("-ch([0-9a-fA-F][0-9a-fA-F])"); // -chXX create charset
@@ -42,36 +43,39 @@ public class Sprite2asm {
     private int bgIndex = 0;     // black, but actually defaults to transparent index
     private int mc1Index = 1;    // white
     private int mc2Index = 2;    // red
+    private int defaultIndex = -1;// >= 0 enables charmap in charset mode
+    private int uniqueIndex = 0; // unique color detected by colorIndexToBits()
     private int chOffset = -1;   // >= 0 enables charset mode, but default is sprites
     private int syOffset = 0;    // sprite y-offset
 
-    // remaps retrieved pixel color to bit pattern
+    /** remaps retrieved pixel color to bit pattern; also sets uniqueIndex repeatedly to detected color */
     // pixelWidth 1: fgIndex set: fgIndex is '1', any other color is '0' (background)
     //                 otherwise: bgIndex is '0', any other color is '1' (char/sprite color)
     // pixelWidth 2: bgIndex is '00'(0), mc1Index is '01'(1), mc2Index is '11'(3), any other is '10'(2) (sprite color)
     //               bgIndex is '00'(0), mc1Index is '01'(1), mc2Index is '10'(2), any other is '11'(3) (char color)
-    private int remapPixel(int pixel, int myPixelWidth) {
+    private int colorIndexToBits(int colorIndex, int myPixelWidth) {
         int b;
         if (myPixelWidth == 1) {
             // hires
             if (fgIndex >= 0) {
-                b = pixel == fgIndex ? 1 : 0;
+                b = (colorIndex == fgIndex) ? 1 : 0;
             } else {
-                b = pixel == bgIndex ? 0 : 1;
+                b = (colorIndex == bgIndex) ? 0 : 1;
             }
+            if (b > 0) uniqueIndex = colorIndex;
         } else {
             if (chOffset >= 0) {
                 // mc char
-                if (pixel == bgIndex) b = 0;
-                else if (pixel == mc1Index) b = 1;
-                else if (pixel == mc2Index) b = 2;
-                else b = 3;
+                if (colorIndex == bgIndex) b = 0;
+                else if (colorIndex == mc1Index) b = 1;
+                else if (colorIndex == mc2Index) b = 2;
+                else { b = 3; uniqueIndex = colorIndex; }
             } else {
                 // mc sprite
-                if (pixel == bgIndex) b = 0;
-                else if (pixel == mc1Index) b = 1;
-                else if (pixel == mc2Index) b = 3;
-                else b = 2;
+                if (colorIndex == bgIndex) b = 0;
+                else if (colorIndex == mc1Index) b = 1;
+                else if (colorIndex == mc2Index) b = 3;
+                else { b = 2; uniqueIndex = colorIndex; }
             }
         }
         return b;
@@ -83,9 +87,9 @@ public class Sprite2asm {
         byte b = 0;
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x += myPixelWidth) {
-                int pixel = pixels.getSample(x + xoff, y + yoff, 0);
+                int colorIndex = pixels.getSample(x + xoff, y + yoff, 0);
                 b <<= myPixelWidth;
-                b |= remapPixel(pixel, myPixelWidth);
+                b |= colorIndexToBits(colorIndex, myPixelWidth);
                 bitcount += myPixelWidth;
                 if (bitcount == 8) {
                     buf[bufoffset++] = b;
@@ -96,7 +100,8 @@ public class Sprite2asm {
         }
     }
 
-    // Detect a hires character, with the following heuristic:
+    // Heuristic:
+    //  a hires char is detected when:
     //   1) there are exactly 2 colors with one being bgIndex, and
     //   2) there is at least one single width pixel
     // Note that a 2 color character with only double width pixels will map to color bits '11' anyway
@@ -155,6 +160,11 @@ public class Sprite2asm {
         if (sy.find()) { // -syXX starting sprite y-offset
             syOffset = Integer.parseInt(sy.group(1),16);
         }
+        Matcher cm = CMPATTERN.matcher(str);
+        defaultIndex = -1;
+        if (cm.find()) { // -cmX enable colormap with default color
+            defaultIndex = Integer.parseInt(cm.group(1),16);
+        }
     }
 
     private void run(String arg) throws IOException {
@@ -194,16 +204,17 @@ public class Sprite2asm {
 
     // convert characters with charset and charmap
     private void convertChars(String header, int width, int height) {
-        // TODO: colormap from extractChar?
         byte[] charset = new byte[8 * 256];
         int charsetSize = 0;
         byte[] charmap = new byte[1000]; // max full screen
+        byte[] colormap = new byte[1000]; // max full screen
         int charmapSize = 0;
         byte[] curChar = new byte[8];
         int emptyChar = -1; // not found
         for (int cy = 0; cy + 8 <= height; cy += 8) {
             for (int cx = 0; cx + 8 <= width; cx += 8) {
                 int detectedPixelWidth = (pixelWidth > 1 && isHiresChar(cx, cy)) ? 1 : pixelWidth;
+                uniqueIndex = defaultIndex;
                 extractObject(cx, cy, 8, 8, curChar, detectedPixelWidth);
                 int ch = findInCharset(curChar, charset, charsetSize);
                 if (ch == charsetSize) { // not found
@@ -219,6 +230,14 @@ public class Sprite2asm {
                         break;
                     }
                 }
+                // correct character color for mc
+                if (pixelWidth > 1) {
+                    uniqueIndex = (uniqueIndex & 0x07);
+                    if (detectedPixelWidth > 1) {
+                        uniqueIndex |= 0x08; // bit 3 of character color determines mc or hires
+                    }
+                }
+                colormap[charmapSize] = (byte) uniqueIndex;
                 charmap[charmapSize++] = (byte) (ch + chOffset);
             }
         }
@@ -240,6 +259,10 @@ public class Sprite2asm {
         sb.append(header);
         sb.append(String.format("; charmap %d bytes (%d x %d)\n", charmapSize, width / 8, height / 8));
         appendByteRows(sb, charmap, charmapSize, width / 8);
+        if (defaultIndex >= 0) {
+            sb.append(String.format("; colormap %d bytes (%d x %d)\n", charmapSize, width / 8, height / 8));
+            appendByteRows(sb, colormap, charmapSize, width / 8);
+        }
         System.out.print(sb);
         if (charsetSize + chOffset > 256) {
             System.err.format("WARNING: charmap overflows with %d characters; use offset -ch%02X instead\n",

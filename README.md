@@ -1,16 +1,16 @@
 # Sprite2asm
 
-Sprite2asm converts 16 color indexed PNG file assets, specifically sprite sheets and character screens to C64 assembly code.
+Sprite2asm converts 16 color indexed PNG file assets, specifically sprite sheets, but also character screens to C64 assembly code.
 
 ### USAGE
 
-`java Sprite2asm [option] [file.png] ..`
+`java Sprite2asm [options] file.png [[options] file2.png] ..`
 
 The default is to convert hires sprites with background color set to the transparent color of the asset.
 
 ### OPTIONS
 
-The following options can be given on the command line or put in the file name (where `X` and `Y` are hex digits):
+The following options can be put in the file name or given on the command line (with `X` and `Y` being hex digits):
 
  * `-bgX`:
  selects hires conversion with color `X` mapped to bit pattern `0` (background).
@@ -24,12 +24,15 @@ The following options can be given on the command line or put in the file name (
  The background color is mapped to bit pattern `00`. Other colors map to the remaining bit pattern (`10` for sprites, `11` for charsets).
 
  * `-syXX`:
- y-offset applied when converting sprites (defaults to 0).
+ y-offset applied when converting sprites (defaults to 0). Useful when extracting sprite overlays.
 
  * `-chXX`:
  convert to charset and charmap instead of sprites (bytes start at `XX`, usually `00`).
  With multi color conversion, characters consisting of 2 colors (where one is background) that contain single pixels are still converted as hires.
 
+ * `-cmX`:
+ together with `-chXX` also generate colormap with `X` as default character color. 
+   
 Options on the command line take priority over those in the file name.
 
 Example: `java Sprite2asm -mcXY file1-ch07.png file2.png` will interpret asset `file1-ch07.png` as multi color and convert it to charset and charmap, where bytes in the charmap start at `7`. Asset `file2.png` will be converted to multi color sprites, as sprites are the default.
