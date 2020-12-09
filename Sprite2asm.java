@@ -12,7 +12,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 // Convert spritesheet to asm
-// Test
 
 public class Sprite2asm {
 
