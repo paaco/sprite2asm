@@ -25,6 +25,7 @@ public class Sprite2asm {
     private static final Pattern MCPATTERN = Pattern.compile("-mc([0-9a-fA-F])([0-9a-fA-F])"); // -mcXX mc1 mc2
     // charset specifiers
     private static final Pattern CHPATTERN = Pattern.compile("-ch([0-9a-fA-F][0-9a-fA-F])"); // -chXX create charset
+    private static final Pattern TMPATTERN = Pattern.compile("-tm([2-9])"); // -tmX enable tilemap
     // other specifiers
     private static final Pattern SYPATTERN = Pattern.compile("-sy([0-9a-fA-F][0-9a-fA-F])"); // -syXX starting sprite y-offset
 
@@ -47,6 +48,7 @@ public class Sprite2asm {
     private int uniqueIndex = 0; // unique color detected by colorIndexToBits()
     private int chOffset = -1;   // >= 0 enables charset mode, but default is sprites
     private int syOffset = 0;    // sprite y-offset
+    private int tileWidth = 0;   // > 0 enables tilemap with tileWidth*tileWidth tiles
 
     /** remaps retrieved pixel color to bit pattern; also sets uniqueIndex repeatedly to detected color */
     // pixelWidth 1: fgIndex set: fgIndex is '1', any other color is '0' (background)
@@ -131,6 +133,16 @@ public class Sprite2asm {
         return pixelsDiffer;
     }
 
+    // extract tile from charmap
+    private void extractTile(byte[] charmap, int charmapWidth, int cx, int cy, int tileW, int tileH, byte[] buf) {
+        int i = 0;
+        for (int y = cy; y < cy + tileH; y++) {
+            for (int x = cx; x < cx + tileW; x++) {
+                buf[i++] = charmap[y * charmapWidth + x];
+            }
+        }
+    }
+
     // extract formatting instructions from string
     private void updateSettings(String str) {
         Matcher bg = BGPATTERN.matcher(str);
@@ -164,6 +176,12 @@ public class Sprite2asm {
         defaultIndex = -1;
         if (cm.find()) { // -cmX enable colormap with default color
             defaultIndex = Integer.parseInt(cm.group(1),16);
+        }
+        Matcher tm = TMPATTERN.matcher(str);
+        tileWidth = 0;
+        if (tm.find()) { // -tmX enable tilemap
+            tileWidth = Integer.parseInt(tm.group(1),16);
+            if (chOffset == -1) chOffset = 0; // force charmap
         }
     }
 
@@ -202,13 +220,19 @@ public class Sprite2asm {
         }
     }
 
-    // convert characters with charset and charmap
+    // convert characters with charset and charmap and tilemap
     private void convertChars(String header, int width, int height) {
+        int width8 = width / 8;
+        int height8 = height / 8;
         byte[] charset = new byte[8 * 256];
         int charsetSize = 0;
-        byte[] charmap = new byte[1000]; // max full screen
-        byte[] colormap = new byte[1000]; // max full screen
+        byte[] charmap = new byte[width8 * height8];
+        byte[] colormap = new byte[width8 * height8];
+        byte[] tiles = new byte[width8 * height8];
+        byte[] tilemap = new byte[width8 * height8];
         int charmapSize = 0;
+        int tilesCount = 0;
+        int tileSize = tileWidth * tileWidth;
         byte[] curChar = new byte[8];
         int emptyChar = -1; // not found
         for (int cy = 0; cy + 8 <= height; cy += 8) {
@@ -216,7 +240,7 @@ public class Sprite2asm {
                 int detectedPixelWidth = (pixelWidth > 1 && isHiresChar(cx, cy)) ? 1 : pixelWidth;
                 uniqueIndex = defaultIndex;
                 extractObject(cx, cy, 8, 8, curChar, detectedPixelWidth);
-                int ch = findInCharset(curChar, charset, charsetSize);
+                int ch = findInSet(curChar, charset, charsetSize);
                 if (ch == charsetSize) { // not found
                     if (charsetSize * 8 < charset.length) {
                         System.arraycopy(curChar, 0, charset, charsetSize * 8, 8);
@@ -253,15 +277,42 @@ public class Sprite2asm {
                 }
             }
         }
+        // create tilemap
+        if (tileSize > 0) {
+            int i = 0;
+            byte[] curTile = new byte[tileSize];
+            for (int cy = 0; cy + tileWidth <= height8; cy += tileWidth) {
+                for (int cx = 0; cx + tileWidth <= width8; cx += tileWidth) {
+                    extractTile(charmap, width8, cx, cy, tileWidth, tileWidth, curTile);
+                    int tile = findInSet(curTile, tiles, tilesCount);
+                    if (tile == tilesCount) { // not found
+                        System.arraycopy(curTile, 0, tiles, tilesCount * tileSize, tileSize);
+                        tilesCount++;
+                    }
+                    tilemap[i++] = (byte) tile;
+                }
+            }
+        }
         StringBuilder sb = new StringBuilder(header);
         sb.append(String.format("; charset %d bytes (%d uniques)\n", charsetSize * 8, charsetSize));
         appendByteRows(sb, charset, charsetSize * 8, 8);
         sb.append(header);
-        sb.append(String.format("; charmap %d bytes (%d x %d)\n", charmapSize, width / 8, height / 8));
-        appendByteRows(sb, charmap, charmapSize, width / 8);
-        if (defaultIndex >= 0) {
-            sb.append(String.format("; colormap %d bytes (%d x %d)\n", charmapSize, width / 8, height / 8));
-            appendByteRows(sb, colormap, charmapSize, width / 8);
+        if (tileSize == 0) {
+            sb.append(String.format("; charmap %d bytes (%d x %d)\n", charmapSize, width8, height8));
+            appendByteRows(sb, charmap, charmapSize, width / 8);
+            if (defaultIndex >= 0) {
+                sb.append(header);
+                sb.append(String.format("; colormap %d bytes (%d x %d)\n", charmapSize, width8, height8));
+                appendByteRows(sb, colormap, charmapSize, width / 8);
+            }
+        } else {
+            sb.append(String.format("; tiles %d bytes %dx%d (%d uniques)\n", tilesCount * tileSize, tileWidth, tileWidth, tilesCount));
+            appendByteRows(sb, tiles, tilesCount * tileSize, tileSize);
+            int w = width8 / tileWidth;
+            int h = height8 / tileWidth;
+            sb.append(header);
+            sb.append(String.format("; tilemap %d bytes (%d x %d)\n", w * h, w, h));
+            appendByteRows(sb, tilemap, w * h, w);
         }
         System.out.print(sb);
         if (charsetSize + chOffset > 256) {
@@ -311,13 +362,14 @@ public class Sprite2asm {
     }
 
     /** lookup char in charset, returns 'count' if not found */
-    private int findInCharset(byte[] curChar, byte[] charset, int count) {
+    private int findInSet(byte[] tile, byte[] tileset, int tileCount) {
         int i = 0;
-        while (i < count) {
+        int size = tile.length;
+        while (i < tileCount) {
             int j = 0;
-            while (j < 8 && curChar[j] == charset[i * 8 + j])
+            while (j < size && tile[j] == tileset[i * size + j])
                 j++;
-            if (j == 8)
+            if (j == size)
                 return i;
             i++;
         }
