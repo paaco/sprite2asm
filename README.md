@@ -35,9 +35,6 @@ The following options can be put in the file name or given on the command line (
    * `-cmX`:
    together with `-ch`, also generate colormap with `X` as default character color. 
 
- * `-tmX`:
-converts to X*X tiles and tilemap instead of sprites. X can be `2` upto `9`. Bytes start at 0 unless specified with `-ch`.
-
 Options on the command line take priority over those in the file name.
 
 Example: `java Sprite2asm -mcXY file1-ch07.png file2.png` will interpret asset `file1-ch07.png` as multi color and convert it to charset and charmap, where bytes in the charmap start at `7`. Asset `file2.png` will be converted to multi color sprites, as sprites are the default.
