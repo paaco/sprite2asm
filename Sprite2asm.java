@@ -220,8 +220,7 @@ public class Sprite2asm {
     private int[] charmap;
     private byte[] colormap;
 
-    void buildCharmap() {
-        if (chOffset == -1) chOffset = 0; // force charmap feature (for when you call this externally)
+    void buildCharmap(int minCharValue) {
         charset = new byte[width8 * height8 * 8]; // enough to always convert the entire image
         charsetSize = 0;
         charmap = new int[width8 * height8];
@@ -250,7 +249,7 @@ public class Sprite2asm {
                     }
                 }
                 colormap[j] = (byte) uniqueIndex;
-                charmap[j++] = ch + chOffset;
+                charmap[j++] = ch + minCharValue;
             }
         }
         // if there's an empty character, move that to front
@@ -258,10 +257,10 @@ public class Sprite2asm {
             System.arraycopy(charset, 0, charset, emptyChar * 8, 8);
             Arrays.fill(charset, 0, 8, (byte) 0);
             for (int i = 0; i < width8 * height8; i++) {
-                if (charmap[i] == chOffset) {
-                    charmap[i] = emptyChar + chOffset;
-                } else if (charmap[i] == emptyChar + chOffset) {
-                    charmap[i] = chOffset;
+                if (charmap[i] == minCharValue) {
+                    charmap[i] = emptyChar + minCharValue;
+                } else if (charmap[i] == emptyChar + minCharValue) {
+                    charmap[i] = minCharValue;
                 }
             }
         }
@@ -269,7 +268,7 @@ public class Sprite2asm {
 
     // convert characters with charset and charmap and tilemap
     private void convertChars(String header) {
-        buildCharmap();
+        buildCharmap(chOffset);
         byte[] charmapBytes = new byte[width8 * height8];
         for (int i = 0; i < width8 * height8; i++) {
             charmapBytes[i] = (byte) charmap[i];
