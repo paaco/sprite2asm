@@ -60,4 +60,23 @@ Thus, sprites are always displayed on top of BG and MC1, but can be behind MC2 a
 ### TODO
  * specify -dh for double height sprites (height 42) what pixel to take? upper or lower?
  * specify -dw for double width sprites (width 48) what pixel to take? left or right?
- * Ldtk tilemap import
+
+
+# Ldtk2asm
+
+Ldtk2asm converts [Ldtk](https://ldtk.io/) map files using 16 color indexed PNG tile sheets to charset, tiles and tilemap(s) in C64 assembly code.
+
+### USAGE
+
+`java Ldtk2asm [options] file.ldtk [[options] file2.ldtk] ..`
+
+The following options can be given on the command line (with X and Y being hex digits):
+
+### OPTIONS
+
+* `-chXX[YY]`:
+  start char indexes in tiles at `XX` (default 0), putting character #0 at index `YY` (default `XX`).
+
+### TODO
+ * combine tiles of multiple levels that use the same tileset
+ * handle Entities
