@@ -74,8 +74,8 @@ public class Ldtk2asm {
                     Object[] gridTiles = array(layerInstance, "gridTiles");
                     Sprite2asm graphics = new Sprite2asm();
                     String tilesetPath = string(layerInstance, "__tilesetRelPath");
-                    // force -ch00 to build charmap starting from 0
-                    graphics.load(tilesetPath,"-ch00 -mc6C -bg0 -cm0");
+                    // set -ch00 to force building charmap from 0
+                    graphics.load(tilesetPath, "-ch00");
                     graphics.buildCharmap();
                     int tileWidth = integer(layerInstance, "__gridSize") / 8; // tile size in #pixels (square)
                     int tileSize = tileWidth * tileWidth;
