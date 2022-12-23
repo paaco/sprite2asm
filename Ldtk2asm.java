@@ -5,10 +5,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -60,15 +57,12 @@ public class Ldtk2asm {
         Object[] levels = array(json, "levels");
         for (Object level : levels) {
             String levelIdentifier = string(level, "identifier");
-            //System.out.println("LEVEL=" + levelIdentifier);
-
             Object[] layerInstances = array(level, "layerInstances");
             for (Object layerInstance : layerInstances) {
                 String type = string(layerInstance, "__type");
                 String layerIdentifier = string(layerInstance, "__identifier");
-                if (type.equals("Tiles")) {
-                    //System.out.println(" LAYER=" + layerIdentifier);
 
+                if (type.equals("Tiles")) {
                     int width = integer(layerInstance, "__cWid");
                     int height = integer(layerInstance, "__cHei");
                     Object[] gridTiles = array(layerInstance, "gridTiles");
@@ -96,7 +90,6 @@ public class Ldtk2asm {
                         }
                         tileMap[i] = (byte)tilenr;
                     }
-
                     // create optimized charset with only the chars used by the tiles in the map
                     byte[] optimizedCharset = new byte[graphics.charset.length];
                     int optimizedCharsetCount = 0;
@@ -112,7 +105,6 @@ public class Ldtk2asm {
                             optimizedCharsetCount++;
                         }
                     }
-
                     StringBuilder sb = new StringBuilder(header);
                     sb.append(String.format("; level: '%s', layer '%s', tileset '%s'\n", levelIdentifier, layerIdentifier, new File(tilesetPath).getName()));
                     sb.append(String.format("; tilemap %d bytes (%d x %d)\n", width * height, width, height));
@@ -139,6 +131,27 @@ public class Ldtk2asm {
                     }
                     Sprite2asm.appendByteRows(sb, optimizedCharset, optimizedCharsetCount * 8, 8);
                     System.out.println(sb);
+
+                } else if (type.equals("Entities")) {
+                    int gridSize = integer(layerInstance, "__gridSize"); // grid size in #pixels (square)
+                    Object[] entityInstances = array(layerInstance, "entityInstances");
+                    // "column based" entities
+                    Map<Integer, String> entities = new HashMap<>();
+                    for (Object entityInstance : entityInstances) {
+                        Object[] px = array(entityInstance, "px"); // top-left coordinate
+                        int pxx = ((Long)px[0]).intValue() / gridSize;
+                        int width = integer(entityInstance, "width") / gridSize;
+                        String identifier = string(entityInstance, "__identifier");
+                        Object[] fieldInstances = array(entityInstance, "fieldInstances"); // list of entity properties
+                        //noinspection unchecked
+                        String value = fieldInstances.length > 0 ? ((JsonObject<String, Object>)fieldInstances[0]).get("__value").toString() : "0";
+                        String data = String.format("!byte %d,%d,%s,%s\n", pxx, width, identifier, value);
+                        entities.put(pxx, entities.getOrDefault(pxx,"") + data); // append
+                    }
+                    StringBuilder sb = new StringBuilder(header);
+                    sb.append(String.format("; level: '%s', layer '%s'\n; xtile,width,entity,value\n", levelIdentifier, layerIdentifier));
+                    entities.keySet().stream().sorted().forEach(key -> sb.append(entities.get(key)));
+                    System.out.print(sb);
                 }
             }
         }
