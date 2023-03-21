@@ -53,60 +53,71 @@ public class Sprite2asm {
     private int mc1Index = 1;    // white
     private int mc2Index = 2;    // red
     private int defaultIndex = -1;// >= 0 enables charmap in charset mode
-    private int uniqueIndex = 0; // unique color detected by colorIndexToBits()
     private int chOffset = -1;   // >= 0 enables charset mode, but default is sprites
     private int syOffset = 0;    // sprite y-offset
 
     /** remaps retrieved pixel color to bit pattern; also sets uniqueIndex repeatedly to detected color */
     // pixelWidth 1: fgIndex set: fgIndex is '1', any other color is '0' (background)
     //                 otherwise: bgIndex is '0', any other color is '1' (char/sprite color)
-    // pixelWidth 2: bgIndex is '00'(0), mc1Index is '01'(1), mc2Index is '11'(3), any other is '10'(2) (sprite color)
-    //               bgIndex is '00'(0), mc1Index is '01'(1), mc2Index is '10'(2), any other is '11'(3) (char color)
-    private int colorIndexToBits(int colorIndex, int myPixelWidth) {
-        int b;
-        if (myPixelWidth == 1) {
-            // hires
-            if (fgIndex >= 0) {
-                b = (colorIndex == fgIndex) ? 1 : 0;
-            } else {
-                b = (colorIndex == bgIndex) ? 0 : 1;
-            }
-            if (b > 0) uniqueIndex = colorIndex;
+    private int colorIndexToBits1(int colorIndex) {
+        if (fgIndex >= 0) {
+            if (colorIndex == fgIndex) return 1;
+            else return 0;
         } else {
-            if (chOffset >= 0) {
-                // mc char
-                if (colorIndex == bgIndex) b = 0;
-                else if (colorIndex == mc1Index) b = 1;
-                else if (colorIndex == mc2Index) b = 2;
-                else { b = 3; uniqueIndex = colorIndex; }
-            } else {
-                // mc sprite
-                if (colorIndex == bgIndex) b = 0;
-                else if (colorIndex == mc1Index) b = 1;
-                else if (colorIndex == mc2Index) b = 3;
-                else { b = 2; uniqueIndex = colorIndex; }
-            }
+            if (colorIndex == bgIndex) return 0;
+            else return 1;
         }
-        return b;
     }
 
-    private void extractObject(int xoff, int yoff, int w, int h, byte[] buf, int myPixelWidth) {
+    /** remaps retrieved pixel color to bit pattern; also sets uniqueIndex repeatedly to detected color */
+    // pixelWidth 2: bgIndex is '00'(0), mc1Index is '01'(1), mc2Index is '11'(3), any other is '10'(2) (sprite color)
+    //               bgIndex is '00'(0), mc1Index is '01'(1), mc2Index is '10'(2), any other is '11'(3) (char color)
+    private int colorIndexToBits2(int colorIndex) {
+        if (chOffset >= 0) {
+            // mc char
+            if (colorIndex == bgIndex) return 0;
+            else if (colorIndex == mc1Index) return 1;
+            else if (colorIndex == mc2Index) return 2;
+            else return 3;
+        } else {
+            // mc sprite
+            if (colorIndex == bgIndex) return 0;
+            else if (colorIndex == mc1Index) return 1;
+            else if (colorIndex == mc2Index) return 3;
+            else return 2;
+        }
+    }
+
+    private int uniqueBits(int myPixelWidth) {
+        if (myPixelWidth == 1) return 1;  // 1 hires
+        else if (chOffset >= 0) return 3; // 11 mc char
+        else return 2;                    // 10 mc sprite
+    }
+
+    private int extractObject(int xoff, int yoff, int w, int h, byte[] buf, int myPixelWidth) {
         int bufoffset = 0;
         int bitcount = 0;
-        byte b = 0;
+        int uniqueIndex = defaultIndex;
+        int uniqueBits = uniqueBits(myPixelWidth);
+        int b = 0;
         for (int y = yoff; y < h + yoff; y++) {
             for (int x = xoff; x < w + xoff; x += myPixelWidth) {
                 int colorIndex = pixels.getSample(x, y, 0);
                 b <<= myPixelWidth;
-                b |= colorIndexToBits(colorIndex, myPixelWidth);
+                int colorBits = (myPixelWidth > 1) ? colorIndexToBits2(colorIndex) : colorIndexToBits1(colorIndex);
+                if (colorBits == uniqueBits) {
+                    uniqueIndex = colorIndex;
+                }
+                b |= colorBits;
                 bitcount += myPixelWidth;
                 if (bitcount == 8) {
-                    buf[bufoffset++] = b;
+                    buf[bufoffset++] = (byte)b;
                     bitcount = 0;
                     b = 0;
                 }
             }
         }
+        return uniqueIndex;
     }
 
     // Heuristic:
@@ -232,8 +243,7 @@ public class Sprite2asm {
         for (int cy = 0; cy + 8 <= height; cy += 8) {
             for (int cx = 0; cx + 8 <= width; cx += 8) {
                 int detectedPixelWidth = (pixelWidth > 1 && isHiresChar(cx, cy)) ? 1 : pixelWidth;
-                uniqueIndex = defaultIndex;
-                extractObject(cx, cy, 8, 8, curChar, detectedPixelWidth);
+                int uniqueIndex = extractObject(cx, cy, 8, 8, curChar, detectedPixelWidth);
                 int ch = findInSet(curChar, charset, charsetSize);
                 if (ch == charsetSize) { // not found
                     System.arraycopy(curChar, 0, charset, charsetSize * 8, 8);

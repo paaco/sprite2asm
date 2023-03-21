@@ -45,12 +45,12 @@ Multicolor bits are interpreted differently for sprites, characters and bitmaps:
 
          mc bits  00        01         10         11
     sprites       BG:$D021  MC1:$D025  $D027+     MC2:$D026
-    chars         BG:$D021  MC1:$D022  MC2:$D023  $D800+
-    bitmap        BG:$D021  SCR:HN     SCR:LN     $D800+
+    chars         BG:$D021  MC1:$D022  MC2:$D023  $D800:LN
+    bitmap        BG:$D021  SCR:HN     SCR:LN     $D800:LN
 
       hires bits  0         1
     sprites       BG:$D021  $D027+
-    chars         BG:$D021  $D800+
+    chars         BG:$D021  $D800:LN
     bitmap        SCR:LN    SCR:HN
 
 Sprites will always appear on top of bit patterns `0`, `00` or `01` of the underlying characters or bitmap.
