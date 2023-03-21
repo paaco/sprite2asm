@@ -50,7 +50,7 @@ public class Ldtk2asm {
             throw new IOException("Not a LDtk Project JSON");
         }
 
-        String header = String.format("; Ldtk2asm '%s' on %s\n",
+        String header = String.format("; Ldtk2asm '%s' on %s%n",
                 new File(filename).getName(),
                 new SimpleDateFormat("dd-MMM-yyyy HH:mm:ss", Locale.ENGLISH).format(new Date()));
 
@@ -106,11 +106,11 @@ public class Ldtk2asm {
                         }
                     }
                     StringBuilder sb = new StringBuilder(header);
-                    sb.append(String.format("; level: '%s', layer '%s', tileset '%s'\n", levelIdentifier, layerIdentifier, new File(tilesetPath).getName()));
-                    sb.append(String.format("; tilemap %d bytes (%d x %d)\n", width * height, width, height));
+                    sb.append(String.format("; level: '%s', layer '%s', tileset '%s'%n", levelIdentifier, layerIdentifier, new File(tilesetPath).getName()));
+                    sb.append(String.format("; tilemap %d bytes (%d x %d)%n", width * height, width, height));
                     Sprite2asm.appendByteRows(sb, tileMap, width * height, width);
                     sb.append(header);
-                    sb.append(String.format("; tiles %d bytes %dx%d SoA %d x %d (%d uniques)\n",
+                    sb.append(String.format("; tiles %d bytes %dx%d SoA %d x %d (%d uniques)%n",
                             tileSetCount * tileSize, tileWidth, tileWidth, tileSetCount, tileSize, tileSetCount));
                     byte[] tileRow = new byte[tileSetCount];
                     for (int c = 0; c < tileSize; c++) {
@@ -122,12 +122,12 @@ public class Ldtk2asm {
                         Sprite2asm.appendByteRows(sb, tileRow, tileSetCount, tileSetCount);
                     }
                     sb.append(header);
-                    sb.append(String.format("; charset %d bytes (%d uniques)\n", optimizedCharsetCount * 8, optimizedCharsetCount));
+                    sb.append(String.format("; charset %d bytes (%d uniques)%n", optimizedCharsetCount * 8, optimizedCharsetCount));
                     if (chEmpty != -1) {
-                        sb.append(String.format("; NOTE chars start at index %d (byteoffset %d)\n", (chOffset+1), (chOffset+1) * 8));
-                        sb.append(String.format("; NOTE char#0 needs to be put at place %d (offset %d)!\n", chEmpty, chEmpty * 8));
+                        sb.append(String.format("; NOTE chars start at index %d (byteoffset %d)%n", (chOffset+1), (chOffset+1) * 8));
+                        sb.append(String.format("; NOTE char#0 needs to be put at place %d (offset %d)!%n", chEmpty, chEmpty * 8));
                     } else if (chOffset != 0) {
-                        sb.append(String.format("; NOTE chars start at index %d (byteoffset %d)\n", chOffset, chOffset * 8));
+                        sb.append(String.format("; NOTE chars start at index %d (byteoffset %d)%n", chOffset, chOffset * 8));
                     }
                     Sprite2asm.appendByteRows(sb, optimizedCharset, optimizedCharsetCount * 8, 8);
                     System.out.println(sb);
@@ -145,11 +145,12 @@ public class Ldtk2asm {
                         Object[] fieldInstances = array(entityInstance, "fieldInstances"); // list of entity properties
                         //noinspection unchecked
                         String value = fieldInstances.length > 0 ? ((JsonObject<String, Object>)fieldInstances[0]).get("__value").toString() : "0";
-                        String data = String.format("!byte %d,%d,%s,%s\n", pxx, width, identifier, value);
+                        // TODO data as (byte) list so that it can be SoA instead
+                        String data = String.format("!byte %d,%d,%s,%s%n", pxx, width, identifier, value);
                         entities.put(pxx, entities.getOrDefault(pxx,"") + data); // append
                     }
                     StringBuilder sb = new StringBuilder(header);
-                    sb.append(String.format("; level: '%s', layer '%s'\n; xtile,width,entity,value\n", levelIdentifier, layerIdentifier));
+                    sb.append(String.format("; level: '%s', layer '%s'%n; xtile,width,entity,value%n", levelIdentifier, layerIdentifier));
                     entities.keySet().stream().sorted().forEach(key -> sb.append(entities.get(key)));
                     System.out.print(sb);
                 }

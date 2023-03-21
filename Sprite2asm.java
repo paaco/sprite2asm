@@ -113,7 +113,7 @@ public class Sprite2asm {
     //  a hires char is detected when:
     //   1) there are exactly 2 colors with one being bgIndex, and
     //   2) there is at least one single width pixel
-    // Note that a 2 color character with only double width pixels will map to color bits '11' anyway
+    // Note that a 2 color character with only double width pixels will map to color bits 11 anyway
     //  if the color is not mc1Index or mc2Index, so its binary content is the same for mc and hires!
     private boolean isHiresChar(int xoff, int yoff) {
         int hiresColor = -1; // starts off unknown
@@ -204,7 +204,7 @@ public class Sprite2asm {
 
     private void processFile(String srcfilename, String extraArguments) throws IOException {
         load(srcfilename, extraArguments);
-        String header = String.format("; Sprite2asm %s'%s' on %s\n",
+        String header = String.format("; Sprite2asm %s'%s' on %s%n",
                 extraArguments.isEmpty() ? "" : extraArguments + " ",
                 new File(srcfilename).getName(),
                 new SimpleDateFormat("dd-MMM-yyyy HH:mm:ss", Locale.ENGLISH).format(new Date()));
@@ -275,19 +275,19 @@ public class Sprite2asm {
             charmapBytes[i] = (byte) charmap[i];
         }
         StringBuilder sb = new StringBuilder(header);
-        sb.append(String.format("; charset %d bytes (%d uniques)\n", charsetSize * 8, charsetSize));
+        sb.append(String.format("; charset %d bytes (%d uniques)%n", charsetSize * 8, charsetSize));
         appendByteRows(sb, charset, charsetSize * 8, 8);
         sb.append(header);
-        sb.append(String.format("; charmap %d bytes (%d x %d)\n", width8 * height8, width8, height8));
+        sb.append(String.format("; charmap %d bytes (%d x %d)%n", width8 * height8, width8, height8));
         appendByteRows(sb, charmapBytes, width8 * height8, width8);
         if (defaultIndex >= 0) {
             sb.append(header);
-            sb.append(String.format("; colormap %d bytes (%d x %d)\n", width8 * height8, width8, height8));
+            sb.append(String.format("; colormap %d bytes (%d x %d)%n", width8 * height8, width8, height8));
             appendByteRows(sb, colormap, width8 * height8, width8);
         }
         System.out.print(sb);
         if (charsetSize + chOffset > 256) {
-            System.err.format("WARNING: charmap overflows with %d characters; use offset -ch%02X instead\n",
+            System.err.format("WARNING: charmap overflows with %d characters; use offset -ch%02X instead%n",
                     charsetSize + chOffset - 256, 256 - charsetSize);
         }
     }
@@ -300,7 +300,7 @@ public class Sprite2asm {
                 extractObject(sx, sy, 24, 21, sprite, pixelWidth);
                 if (containsAnyBits(sprite)) {
                     StringBuilder sb = new StringBuilder(nr == 0 ? header : "");
-                    sb.append(String.format("; %d (%d,%d)\n", nr, sx, sy));
+                    sb.append(String.format("; %d (%d,%d)%n", nr, sx, sy));
                     appendByteRows(sb, sprite, 64, 24);
                     System.out.print(sb);
                     nr++;
