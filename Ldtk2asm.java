@@ -77,6 +77,11 @@ public class Ldtk2asm {
                     int[] tileSet = new int[tileSize * 256];
                     int tileSetCount = 0;
                     int[] tile = new int[tileSize];
+                    if (gridTiles.length < tileMap.length) {
+                        // gridTiles can be a "sparse" array if not all tiles have been set so gridTiles.length can be < tileMap.length!
+                        throw new IOException("Some cells on the level are still unset (-), unsupported!");
+                    }
+                    // extract the graphics of the used tiles from the gridTiles map
                     for (int i = 0; i < tileMap.length; i++) {
                         // int tilenr = integer(gridTiles[i], "t"); // uncompressed tile#
                         Object[] src = array(gridTiles[i], "src"); // top-left coordinate
