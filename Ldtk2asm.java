@@ -9,6 +9,8 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+// compile with: javac -cp ".;json-io-4.12.0.jar" Ldtk2asm.java
+
 public class Ldtk2asm {
 
     private static final Pattern CHPATTERN = Pattern.compile("-ch([0-9a-fA-F][0-9a-fA-F])([0-9a-fA-F][0-9a-fA-F])?"); // -chXX[YY] offset charset and put #0 at YY
@@ -72,7 +74,7 @@ public class Ldtk2asm {
                     graphics.load(tilesetPath, "-ch00");
                     graphics.buildCharmap();
                     int tileWidth = integer(layerInstance, "__gridSize") / 8; // tile size in #pixels (square)
-                    int tileSize = tileWidth * tileWidth;
+                    int tileSize = tileWidth * tileWidth * 2; // first the chars, followed by a color byte per character
                     byte[] tileMap = new byte[width*height];
                     int[] tileSet = new int[tileSize * 256];
                     int tileSetCount = 0;
@@ -116,9 +118,9 @@ public class Ldtk2asm {
                     Sprite2asm.appendByteRows(sb, tileMap, width * height, width);
                     sb.append(header);
                     sb.append(String.format("; tiles %d bytes %dx%d SoA %d x %d (%d uniques)%n",
-                            tileSetCount * tileSize, tileWidth, tileWidth, tileSetCount, tileSize, tileSetCount));
+                            tileSetCount * tileSize/2, tileWidth, tileWidth, tileSetCount, tileSize/2, tileSetCount));
                     byte[] tileRow = new byte[tileSetCount];
-                    for (int c = 0; c < tileSize; c++) {
+                    for (int c = 0; c < tileSize/2; c++) {
                         for (int i = 0; i < tileSetCount; i++) {
                             byte cindex = usedChars.get(tileSet[i * tileSize + c]);
                             // now shift offset or move char#0 if required
@@ -126,6 +128,16 @@ public class Ldtk2asm {
                         }
                         Sprite2asm.appendByteRows(sb, tileRow, tileSetCount, tileSetCount);
                     }
+                    sb.append(header);
+                    sb.append(String.format("; colortiles %d bytes %dx%d SoA %d x %d (%d uniques)%n",
+                            tileSetCount * tileSize/2, tileWidth, tileWidth, tileSetCount, tileSize/2, tileSetCount));
+                    for (int c = tileSize/2; c < tileSize; c++) {
+                        for (int i = 0; i < tileSetCount; i++) {
+                            tileRow[i] = (byte)tileSet[i * tileSize + c];
+                        }
+                        Sprite2asm.appendByteRows(sb, tileRow, tileSetCount, tileSetCount);
+                    }
+
                     sb.append(header);
                     sb.append(String.format("; charset %d bytes (%d uniques)%n", optimizedCharsetCount * 8, optimizedCharsetCount));
                     if (chEmpty != -1) {
@@ -148,7 +160,7 @@ public class Ldtk2asm {
                         int width = integer(entityInstance, "width") / gridSize;
                         String identifier = string(entityInstance, "__identifier");
                         Object[] fieldInstances = array(entityInstance, "fieldInstances"); // list of entity properties
-                        //noinspection unchecked
+                        @SuppressWarnings("unchecked")
                         String value = fieldInstances.length > 0 ? ((JsonObject<String, Object>)fieldInstances[0]).get("__value").toString() : "0";
                         // TODO data as (byte) list so that it can be SoA instead
                         String data = String.format("!byte %d,%d,%s,%s%n", pxx, width, identifier, value);
@@ -163,24 +175,23 @@ public class Ldtk2asm {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private String string(Object obj, String fieldname) {
-        //noinspection unchecked
         return ((JsonObject<String,String>) obj).get(fieldname);
     }
 
-    @SuppressWarnings("SameParameterValue")
+    @SuppressWarnings({"SameParameterValue","unchecked"})
     private JsonObject<String,Object> map(Object obj, String fieldname) {
-        //noinspection unchecked
         return ((JsonObject<String,JsonObject<String,Object>>) obj).get(fieldname);
     }
 
+    @SuppressWarnings("unchecked")
     private Object[] array(Object obj, String fieldname) {
-        //noinspection unchecked
         return ((JsonObject<String,Object[]>) obj).get(fieldname);
     }
 
+    @SuppressWarnings("unchecked")
     private int integer(Object obj, String fieldname) {
-        //noinspection unchecked
         return ((JsonObject<String,Long>) obj).get(fieldname).intValue();
     }
 

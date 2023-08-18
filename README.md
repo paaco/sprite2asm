@@ -33,7 +33,7 @@ The following options can be put in the file name or given on the command line (
  With multicolor conversion, characters consisting of 2 colors (where one is background) that contain single pixels are still converted as hires.
 
    * `-cmX`:
-   together with `-ch`, also generate colormap with `X` as default character color. 
+   together with `-ch`, also generate colormap with `X` as color when a character is empty or only contains multi colors. 
 
 Options on the command line take priority over those in the file name.
 

@@ -151,11 +151,12 @@ public class Sprite2asm {
         return pixelsDiffer;
     }
 
-    // extract tile from charmap
+    // extract tile from charmap (2*tileW*tileH bytes characters and color bytes)
     void extractTile(int cx, int cy, int tileW, int tileH, int[] buf) {
         int i = 0;
         for (int y = cy; y < cy + tileH; y++) {
             for (int x = cx; x < cx + tileW; x++) {
+                buf[i + tileW * tileH] = colormap[y * width8 + x];
                 buf[i++] = charmap[y * width8 + x];
             }
         }
