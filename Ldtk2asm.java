@@ -70,6 +70,11 @@ public class Ldtk2asm {
                     Object[] gridTiles = array(layerInstance, "gridTiles");
                     Sprite2asm graphics = new Sprite2asm();
                     String tilesetPath = string(layerInstance, "__tilesetRelPath");
+                    // `tilesetPath` can be relative to `filename`
+                    if (!tilesetPath.contains(":") && !tilesetPath.startsWith("/")) {
+                        String folder = new File(filename).getParent();
+                        tilesetPath = new File(folder, tilesetPath).getCanonicalPath();
+                    }
                     // set -ch00 to force building charmap from 0
                     graphics.load(tilesetPath, "-ch00");
                     graphics.buildCharmap();
