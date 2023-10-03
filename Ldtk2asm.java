@@ -100,19 +100,20 @@ public class Ldtk2asm {
                         tileMap[i] = (byte)tilenr;
                     }
                     // create optimized charset with only the chars used by the tiles in the map
+                    Map<Integer, Byte> usedChars = new HashMap<>();
                     byte[] optimizedCharset = new byte[graphics.charset.length];
                     int optimizedCharsetCount = 0;
                     // always copy character 0
+                    usedChars.put(0, (byte) 0);
                     System.arraycopy(graphics.charset, 0, optimizedCharset, 0, 8);
                     optimizedCharsetCount++;
-                    Map<Integer, Byte> usedChars = new HashMap<>();
-                    usedChars.put(0, (byte) 0);
                     for (int charnr : tileSet) {
-                        if (!usedChars.containsKey(charnr)) {
-                            usedChars.put(charnr, (byte)optimizedCharsetCount);
-                            System.arraycopy(graphics.charset, charnr * 8, optimizedCharset, optimizedCharsetCount * 8, 8);
-                            optimizedCharsetCount++;
+                        if (usedChars.containsKey(charnr)) {
+                            continue;
                         }
+                        usedChars.put(charnr, (byte)optimizedCharsetCount);
+                        System.arraycopy(graphics.charset, charnr * 8, optimizedCharset, optimizedCharsetCount * 8, 8);
+                        optimizedCharsetCount++;
                     }
                     StringBuilder sb = graphics.getOutputSB();
                     sb.append(String.format("; level: '%s', layer '%s', tileset '%s'%n", levelIdentifier, layerIdentifier, new File(tilesetPath).getName()));
