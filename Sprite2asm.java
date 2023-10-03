@@ -46,6 +46,7 @@ public class Sprite2asm {
     private int height;
     private int width8;
     private int height8;
+    private String header;
 
     private int pixelWidth = 1;  // defaults to hires (1=hires, 2=mc)
     private int fgIndex = -1;    // disabled, takes prio over bgIndex
@@ -216,14 +217,11 @@ public class Sprite2asm {
 
     private void processFile(String srcfilename, String extraArguments) throws IOException {
         load(srcfilename, extraArguments);
-        String header = String.format("; Sprite2asm %s'%s' on %s%n",
-                extraArguments.isEmpty() ? "" : extraArguments + " ",
-                new File(srcfilename).getName(),
-                new SimpleDateFormat("dd-MMM-yyyy HH:mm:ss", Locale.ENGLISH).format(new Date()));
+        setHeader("Sprite2asm", extraArguments, srcfilename);
         if (chOffset >= 0) {
-            convertChars(header);
+            convertChars();
         } else {
-            convertSprites(header);
+            convertSprites();
         }
     }
 
@@ -279,45 +277,45 @@ public class Sprite2asm {
     }
 
     // convert characters with charset and charmap and tilemap
-    private void convertChars(String header) {
+    private void convertChars() {
         buildCharmap();
         byte[] charmapBytes = new byte[width8 * height8];
         for (int i = 0; i < width8 * height8; i++) {
             charmapBytes[i] = (byte) charmap[i];
         }
-        StringBuilder sb = new StringBuilder(header);
+        StringBuilder sb = getOutputSB();
         sb.append(String.format("; charset %d bytes (%d uniques)%n", charsetSize * 8, charsetSize));
         appendByteRows(sb, charset, charsetSize * 8, 8);
-        sb.append(header);
+        flushOutputSB(sb, "charset");
         sb.append(String.format("; charmap %d bytes (%d x %d)%n", width8 * height8, width8, height8));
         appendByteRows(sb, charmapBytes, width8 * height8, width8);
+        flushOutputSB(sb, "charmap");
         if (defaultIndex >= 0) {
-            sb.append(header);
             sb.append(String.format("; colormap %d bytes (%d x %d)%n", width8 * height8, width8, height8));
             appendByteRows(sb, colormap, width8 * height8, width8);
+            flushOutputSB(sb, "colormap");
         }
-        System.out.print(sb);
         if (charsetSize + chOffset > 256) {
             System.err.format("WARNING: charmap overflows with %d characters; use offset -ch%02X instead%n",
                     charsetSize + chOffset - 256, 256 - charsetSize);
         }
     }
 
-    private void convertSprites(String header) {
+    private void convertSprites() {
         int nr = 0;
         byte[] sprite = new byte[64];
+        StringBuilder sb = getOutputSB();
         for (int sy = syOffset; sy + 21 <= height; sy += 21) {
             for (int sx = 0; sx + 24 <= width; sx += 24) {
                 extractObject(sx, sy, 24, 21, sprite, pixelWidth);
                 if (containsAnyBits(sprite)) {
-                    StringBuilder sb = new StringBuilder(nr == 0 ? header : "");
                     sb.append(String.format("; %d (%d,%d)%n", nr, sx, sy));
                     appendByteRows(sb, sprite, 64, 24);
-                    System.out.print(sb);
                     nr++;
                 }
             }
         }
+        flushOutputSB(sb, "sprites");
     }
 
     private boolean containsAnyBits(byte[] block) {
@@ -356,6 +354,25 @@ public class Sprite2asm {
             i++;
         }
         return i;
+    }
+
+    void setHeader(String program, String arguments, String srcpath) {
+        header = String.format("; %s %s'%s' on %s%n",
+                program,
+                arguments.isEmpty() ? "" : arguments + " ",
+                new File(srcpath).getName(),
+                new SimpleDateFormat("dd-MMM-yyyy HH:mm:ss", Locale.ENGLISH).format(new Date()));
+
+    }
+
+    StringBuilder getOutputSB() {
+        return new StringBuilder(header);
+    }
+
+    void flushOutputSB(StringBuilder sb, String tag) {
+        System.out.println(sb);
+        sb.setLength(0);
+        sb.append(header);
     }
 
 }

@@ -4,7 +4,6 @@ import com.cedarsoftware.util.io.JsonReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -52,9 +51,8 @@ public class Ldtk2asm {
             throw new IOException("Not a LDtk Project JSON");
         }
 
-        String header = String.format("; Ldtk2asm '%s' on %s%n",
-                new File(filename).getName(),
-                new SimpleDateFormat("dd-MMM-yyyy HH:mm:ss", Locale.ENGLISH).format(new Date()));
+        Sprite2asm graphics = new Sprite2asm();
+        graphics.setHeader("Ldtk2asm", "", filename);
 
         Object[] levels = array(json, "levels");
         for (Object level : levels) {
@@ -68,7 +66,6 @@ public class Ldtk2asm {
                     int width = integer(layerInstance, "__cWid");
                     int height = integer(layerInstance, "__cHei");
                     Object[] gridTiles = array(layerInstance, "gridTiles");
-                    Sprite2asm graphics = new Sprite2asm();
                     String tilesetPath = string(layerInstance, "__tilesetRelPath");
                     // `tilesetPath` can be relative to `filename`
                     if (!tilesetPath.contains(":") && !tilesetPath.startsWith("/")) {
@@ -117,11 +114,11 @@ public class Ldtk2asm {
                             optimizedCharsetCount++;
                         }
                     }
-                    StringBuilder sb = new StringBuilder(header);
+                    StringBuilder sb = graphics.getOutputSB();
                     sb.append(String.format("; level: '%s', layer '%s', tileset '%s'%n", levelIdentifier, layerIdentifier, new File(tilesetPath).getName()));
                     sb.append(String.format("; tilemap %d bytes (%d x %d)%n", width * height, width, height));
                     Sprite2asm.appendByteRows(sb, tileMap, width * height, width);
-                    sb.append(header);
+                    graphics.flushOutputSB(sb, "tilemap");
                     sb.append(String.format("; tiles %d bytes %dx%d SoA %d x %d (%d uniques)%n",
                             tileSetCount * tileSize/2, tileWidth, tileWidth, tileSetCount, tileSize/2, tileSetCount));
                     byte[] tileRow = new byte[tileSetCount];
@@ -133,7 +130,7 @@ public class Ldtk2asm {
                         }
                         Sprite2asm.appendByteRows(sb, tileRow, tileSetCount, tileSetCount);
                     }
-                    sb.append(header);
+                    graphics.flushOutputSB(sb, "tiles");
                     sb.append(String.format("; colortiles %d bytes %dx%d SoA %d x %d (%d uniques)%n",
                             tileSetCount * tileSize/2, tileWidth, tileWidth, tileSetCount, tileSize/2, tileSetCount));
                     for (int c = tileSize/2; c < tileSize; c++) {
@@ -142,8 +139,7 @@ public class Ldtk2asm {
                         }
                         Sprite2asm.appendByteRows(sb, tileRow, tileSetCount, tileSetCount);
                     }
-
-                    sb.append(header);
+                    graphics.flushOutputSB(sb, "colortiles");
                     sb.append(String.format("; charset %d bytes (%d uniques)%n", optimizedCharsetCount * 8, optimizedCharsetCount));
                     if (chEmpty != -1) {
                         sb.append(String.format("; NOTE chars start at index %d (byteoffset %d)%n", (chOffset+1), (chOffset+1) * 8));
@@ -152,7 +148,7 @@ public class Ldtk2asm {
                         sb.append(String.format("; NOTE chars start at index %d (byteoffset %d)%n", chOffset, chOffset * 8));
                     }
                     Sprite2asm.appendByteRows(sb, optimizedCharset, optimizedCharsetCount * 8, 8);
-                    System.out.println(sb);
+                    graphics.flushOutputSB(sb, "charset");
 
                 } else if (type.equals("Entities")) {
                     int gridSize = integer(layerInstance, "__gridSize"); // grid size in #pixels (square)
@@ -171,10 +167,10 @@ public class Ldtk2asm {
                         String data = String.format("!byte %d,%d,%s,%s%n", pxx, width, identifier, value);
                         entities.put(pxx, entities.getOrDefault(pxx,"") + data); // append
                     }
-                    StringBuilder sb = new StringBuilder(header);
+                    StringBuilder sb = graphics.getOutputSB();
                     sb.append(String.format("; level: '%s', layer '%s'%n; xtile,width,entity,value%n", levelIdentifier, layerIdentifier));
                     entities.keySet().stream().sorted().forEach(key -> sb.append(entities.get(key)));
-                    System.out.print(sb);
+                    graphics.flushOutputSB(sb, "entities");
                 }
             }
         }
