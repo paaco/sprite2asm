@@ -37,7 +37,8 @@ The following options can be put in the file name or given on the command line (
 
 Options on the command line take priority over those in the file name.
 
-Example: `java Sprite2asm -mcXY file1-ch07.png file2.png` will interpret asset `file1-ch07.png` as multi color and convert it to charset and charmap, where bytes in the charmap start at `7`. Asset `file2.png` will be converted to multi color sprites, as sprites are the default.
+Example: `java Sprite2asm -mcXY file1-ch07.png file2.png` will interpret asset `file1-ch07.png` as multicolor and convert it to charset and charmap, where bytes in the charmap start at `7`.
+Asset `file2.png` will be converted to multicolor sprites, as sprites are the default.
 
 ### BIT FORMATS
 
@@ -58,9 +59,9 @@ However, sprites with 'lower' priority - their bit set to `1` in `$D01B` - will 
 Thus, sprites are always displayed on top of BG and MC1, but can be behind MC2 and $D800+.
 
 ### TODO
- * specify -dh for double height sprites (height 42) what pixel to take? upper or lower?
- * specify -dw for double width sprites (width 48) what pixel to take? left or right?
-
+ * specify -dh for double height sprites (height 42) y-step 2 instead of 1
+ * specify -dw for double width sprites (width 48) x-step 2 instead of 1 (MC sample at x+2 instead x+1)
+ * specify -hw for half width multicolor sprites (width 12)
 
 # Ldtk2asm
 
