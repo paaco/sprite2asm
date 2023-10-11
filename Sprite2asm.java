@@ -62,11 +62,9 @@ public class Sprite2asm {
     //                 otherwise: bgIndex is '0', any other color is '1' (char/sprite color)
     private int colorIndexToBits1(int colorIndex) {
         if (fgIndex >= 0) {
-            if (colorIndex == fgIndex) return 1;
-            else return 0;
+            return (colorIndex == fgIndex) ? 1 : 0;
         } else {
-            if (colorIndex == bgIndex) return 0;
-            else return 1;
+            return (colorIndex == bgIndex) ? 0 : 1;
         }
     }
 
@@ -134,22 +132,23 @@ public class Sprite2asm {
             for (int x = 0; x < 8; x += 2) {
                 int pixel1 = pixels.getSample(x + xoff, y + yoff, 0);
                 int pixel2 = pixels.getSample(x + xoff + 1, y + yoff, 0);
-                if (hiresColor < 0 && pixel1 != bgIndex) {
-                    hiresColor = pixel1;
-                }
-                if (hiresColor < 0 && pixel2 != bgIndex) {
-                    hiresColor = pixel2;
-                }
+                hiresColor = calcFgColor(hiresColor, pixel1);
+                hiresColor = calcFgColor(hiresColor, pixel2);
                 if ((pixel1 != bgIndex && pixel1 != hiresColor) ||
                     (pixel2 != bgIndex && pixel2 != hiresColor)) {
                     return false; // 3rd color detected
                 }
                 if (pixel1 != pixel2) {
                     pixelsDiffer = true;
+                    // don't return here to continue to find 3rd color
                 }
             }
         }
         return pixelsDiffer;
+    }
+
+    private int calcFgColor(int hiresColor, int pixel) {
+        return (hiresColor < 0 && pixel != bgIndex) ? pixel : hiresColor;
     }
 
     // extract tile from charmap (2*tileW*tileH bytes characters and color bytes)
