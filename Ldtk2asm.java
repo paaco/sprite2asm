@@ -103,17 +103,21 @@ public class Ldtk2asm {
                     Map<Integer, Byte> usedChars = new HashMap<>();
                     byte[] optimizedCharset = new byte[graphics.charset.length];
                     int optimizedCharsetCount = 0;
+                    // TODO rethink empty char handling: why are we doing this again? what if no empty char used in the map?
                     // always copy character 0
                     usedChars.put(0, (byte) 0);
                     System.arraycopy(graphics.charset, 0, optimizedCharset, 0, 8);
                     optimizedCharsetCount++;
-                    for (int charnr : tileSet) {
-                        if (usedChars.containsKey(charnr)) {
-                            continue;
+                    for (int i = 0; i < tileSetCount; i++) {
+                        for (int j = 0; j < tileSize/2; j++) { // only consider char indices, not color bytes in tiles
+                            int charnr = tileSet[i * tileSize + j];
+                            if (usedChars.containsKey(charnr)) {
+                                continue;
+                            }
+                            usedChars.put(charnr, (byte)optimizedCharsetCount);
+                            System.arraycopy(graphics.charset, charnr * 8, optimizedCharset, optimizedCharsetCount * 8, 8);
+                            optimizedCharsetCount++;
                         }
-                        usedChars.put(charnr, (byte)optimizedCharsetCount);
-                        System.arraycopy(graphics.charset, charnr * 8, optimizedCharset, optimizedCharsetCount * 8, 8);
-                        optimizedCharsetCount++;
                     }
                     StringBuilder sb = graphics.getOutputSB();
                     sb.append(String.format("; level: '%s', layer '%s', tileset '%s'%n", levelIdentifier, layerIdentifier, new File(tilesetPath).getName()));
