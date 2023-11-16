@@ -12,10 +12,10 @@ import java.util.regex.Pattern;
 
 public class Ldtk2asm {
 
-    private static final Pattern CHPATTERN = Pattern.compile("-ch([0-9a-fA-F][0-9a-fA-F])([0-9a-fA-F][0-9a-fA-F])?"); // -chXX[YY] offset charset and put #0 at YY
+    private static final Pattern CHPATTERN = Pattern.compile("-ch([0-9a-fA-F][0-9a-fA-F])([0-9a-fA-F][0-9a-fA-F])?"); // -chXX[YY] offset charset [and put empty char at YY]
 
     private int chOffset = 0;  // offset to start char indexing in tiles (default 0)
-    private int chEmpty = -1;  // index to put char #0 (default -1 put at chOffset)
+    private int chEmpty = -1;  // index to put empty char (default -1 don't care)
 
     public static void main(String[] args) throws Exception {
         StringBuilder arguments = new StringBuilder();
@@ -32,12 +32,9 @@ public class Ldtk2asm {
     // extract formatting instructions from string
     private void updateSettings(String str) {
         Matcher ch = CHPATTERN.matcher(str);
-        if (ch.find()) { // -chXX[YY] offset charset and put #0 at YY
+        if (ch.find()) { // -chXX[YY] offset charset [and put empty char at YY]
             chOffset = Integer.parseInt(ch.group(1),16);
-            if (ch.group(2) != null) {
-                chEmpty =  Integer.parseInt(ch.group(2),16);
-                chOffset--; // char #0 is placed somewhere else
-            }
+            chEmpty = ch.group(2) != null ? Integer.parseInt(ch.group(2),16) : -1;
         }
     }
 
@@ -52,7 +49,7 @@ public class Ldtk2asm {
         }
 
         Sprite2asm graphics = new Sprite2asm();
-        graphics.setHeader("Ldtk2asm", "", filename);
+        graphics.setHeader("Ldtk2asm", arguments, filename);
 
         Object[] levels = array(json, "levels");
         for (Object level : levels) {
@@ -72,8 +69,7 @@ public class Ldtk2asm {
                         String folder = new File(filename).getParent();
                         tilesetPath = new File(folder, tilesetPath).getCanonicalPath();
                     }
-                    // set -ch00 to force building charmap from 0
-                    graphics.load(tilesetPath, "-ch00");
+                    graphics.load(tilesetPath, "-ch00"); // -ch00 to force building charmap and start from 0
                     graphics.buildCharmap();
                     int tileWidth = integer(layerInstance, "__gridSize") / 8; // tile size in #pixels (square)
                     int tileSize = tileWidth * tileWidth * 2; // first the chars, followed by a color byte per character
@@ -86,6 +82,7 @@ public class Ldtk2asm {
                         throw new IOException("Some cells on the level are still unset (-), unsupported!");
                     }
                     // extract the graphics of the used tiles from the gridTiles map
+                    boolean hasEmptyChar = false;
                     for (int i = 0; i < tileMap.length; i++) {
                         // int tilenr = integer(gridTiles[i], "t"); // uncompressed tile#
                         Object[] src = array(gridTiles[i], "src"); // top-left coordinate
@@ -95,26 +92,33 @@ public class Ldtk2asm {
                         int tilenr = findTile(tile, tileSet, tileSetCount);
                         if (tilenr == tileSetCount) {
                             System.arraycopy(tile, 0, tileSet, tileSetCount * tile.length, tile.length);
-                            tilenr = tileSetCount++;
+                            int j = 0;
+                            while (!hasEmptyChar && j < tileSize/2) {
+                                if (tile[j++] == graphics.emptyChar) {
+                                    hasEmptyChar = true;
+                                }
+                            }
+                            tileSetCount++;
                         }
                         tileMap[i] = (byte)tilenr;
                     }
                     // create optimized charset with only the chars used by the tiles in the map
-                    Map<Integer, Byte> usedChars = new HashMap<>();
+                    Map<Integer, Byte> optimizedMap = new HashMap<>();
                     byte[] optimizedCharset = new byte[graphics.charset.length];
                     int optimizedCharsetCount = 0;
-                    // TODO rethink empty char handling: why are we doing this again? what if no empty char used in the map?
-                    // always copy character 0
-                    usedChars.put(0, (byte) 0);
-                    System.arraycopy(graphics.charset, 0, optimizedCharset, 0, 8);
-                    optimizedCharsetCount++;
+                    if (chEmpty >= 0) {
+                        optimizedMap.put(graphics.emptyChar, (byte)chEmpty);
+                    }
                     for (int i = 0; i < tileSetCount; i++) {
                         for (int j = 0; j < tileSize/2; j++) { // only consider char indices, not color bytes in tiles
                             int charnr = tileSet[i * tileSize + j];
-                            if (usedChars.containsKey(charnr)) {
+                            if (optimizedMap.containsKey(charnr)) {
                                 continue;
                             }
-                            usedChars.put(charnr, (byte)optimizedCharsetCount);
+                            if (hasEmptyChar && optimizedCharsetCount + chOffset == chEmpty) {
+                                optimizedCharsetCount++; // skip over the empty char; array is already empty, no need to fill
+                            }
+                            optimizedMap.put(charnr, (byte)(optimizedCharsetCount + chOffset));
                             System.arraycopy(graphics.charset, charnr * 8, optimizedCharset, optimizedCharsetCount * 8, 8);
                             optimizedCharsetCount++;
                         }
@@ -129,9 +133,7 @@ public class Ldtk2asm {
                     byte[] tileRow = new byte[tileSetCount];
                     for (int c = 0; c < tileSize/2; c++) {
                         for (int i = 0; i < tileSetCount; i++) {
-                            byte cindex = usedChars.get(tileSet[i * tileSize + c]);
-                            // now shift offset or move char#0 if required
-                            tileRow[i] = (chEmpty == -1 || cindex != 0) ? (byte)(cindex + chOffset) : (byte)chEmpty;
+                            tileRow[i] = optimizedMap.get(tileSet[i * tileSize + c]);
                         }
                         Sprite2asm.appendByteRows(sb, tileRow, tileSetCount, tileSetCount);
                     }
@@ -146,12 +148,7 @@ public class Ldtk2asm {
                     }
                     graphics.flushOutputSB(sb, "colortiles");
                     sb.append(String.format("; charset %d bytes (%d uniques)%n", optimizedCharsetCount * 8, optimizedCharsetCount));
-                    if (chEmpty != -1) {
-                        sb.append(String.format("; NOTE chars start at index %d (byteoffset %d)%n", (chOffset+1), (chOffset+1) * 8));
-                        sb.append(String.format("; NOTE char#0 needs to be put at place %d (offset %d)!%n", chEmpty, chEmpty * 8));
-                    } else if (chOffset != 0) {
-                        sb.append(String.format("; NOTE chars start at index %d (byteoffset %d)%n", chOffset, chOffset * 8));
-                    }
+                    sb.append(String.format("; NOTE tiles assume these chars start at index $%02x (offset %d)%n", chOffset, chOffset * 8));
                     Sprite2asm.appendByteRows(sb, optimizedCharset, optimizedCharsetCount * 8, 8);
                     graphics.flushOutputSB(sb, "charset");
 

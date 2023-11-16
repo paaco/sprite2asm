@@ -76,7 +76,7 @@ The following options can be given on the command line (with X and Y being hex d
 ### OPTIONS
 
 * `-chXX[YY]`:
-  start char indexes in tiles at `XX` (default 0), putting character #0 at index `YY` (default `XX`).
+  start char indexing in tiles at `XX` (default 0), optionally putting the empty character at index `YY`.
 
 ### TODO
  * combine tiles of multiple levels that use the same tileset

@@ -228,6 +228,7 @@ public class Sprite2asm {
     private int charsetSize;
     private int[] charmap;
     private byte[] colormap;
+    int emptyChar = -1; // not found
 
     void buildCharmap() {
         if (chOffset == -1) chOffset = 0; // force charmap feature (for when you call this externally)
@@ -237,7 +238,7 @@ public class Sprite2asm {
         colormap = new byte[width8 * height8];
         int j = 0;
         byte[] curChar = new byte[8];
-        int emptyChar = -1; // not found
+        emptyChar = -1; // not found
         for (int cy = 0; cy + 8 <= height; cy += 8) {
             for (int cx = 0; cx + 8 <= width; cx += 8) {
                 int detectedPixelWidth = (pixelWidth > 1 && isHiresChar(cx, cy)) ? 1 : pixelWidth;
@@ -261,7 +262,10 @@ public class Sprite2asm {
                 charmap[j++] = ch + chOffset;
             }
         }
-        // if there's an empty character, move that to front
+        flipEmptyCharToFront();
+    }
+
+    private void flipEmptyCharToFront() {
         if (emptyChar > 0) {
             System.arraycopy(charset, 0, charset, emptyChar * 8, 8);
             Arrays.fill(charset, 0, 8, (byte) 0);
@@ -272,6 +276,7 @@ public class Sprite2asm {
                     charmap[i] = chOffset;
                 }
             }
+            emptyChar = 0;
         }
     }
 
