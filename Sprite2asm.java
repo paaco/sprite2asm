@@ -314,7 +314,7 @@ public class Sprite2asm {
                 extractObject(sx, sy, 24, 21, sprite, pixelWidth);
                 if (containsAnyBits(sprite)) {
                     sb.append(String.format("; %d (%d,%d)%n", nr, sx, sy));
-                    appendByteRows(sb, sprite, 64, 24);
+                    appendByteRows(sb, sprite, 64, 21);
                     nr++;
                 }
             }
