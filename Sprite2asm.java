@@ -47,6 +47,10 @@ public class Sprite2asm {
     private int width8;
     private int height8;
     private String header;
+    private int c0; // palette color 0 (background)
+    private int c1; // palette color 1 (mc1)
+    private int c2; // palette color 2 (mc2)
+    private int c3; // palette color 3 (char/sprite color)
 
     private int pixelWidth = 1;  // Hires (1) or multicolor (2). Defaults to hires
     private int fgCol = -1;      // Foreground color. Disabled by default, takes prio over bgCol
@@ -59,52 +63,36 @@ public class Sprite2asm {
 
     /** Remaps pixel to hires bit pattern according to palette and updates palette information */
     private int pixelToBits1(int pixel) {
-        if (fgIndex >= 0) {
-            return (pixel == fgIndex) ? 0b1 : 0b0;
-        } else {
-            return (pixel == bgIndex) ? 0b0 : 0b1;
-        }
+        if (pixel == c3) return 0b1;
+        if (c0 < 0) c0 = pixel;
+        if (pixel == c0) return 0b0;
+        if (c3 < 0) c3 = pixel;
+        // color outside palette
+        return (fgCol >= 0) ? 0b0 : 0b1;
     }
 
-    /** remaps retrieved pixel color to bit pattern */
-    // pixelWidth 2: bgIndex is '00'(0), mc1Index is '01'(1), mc2Index is '11'(3), any other is '10'(2) (sprite color)
-    //               bgIndex is '00'(0), mc1Index is '01'(1), mc2Index is '10'(2), any other is '11'(3) (char color)
+    /** Remaps pixel to multicolor bit pattern according to palette and updates palette information */
     private int pixelToBits2(int pixel) {
-        if (chOffset >= 0) {
-            // mc char
-            if (pixel == bgCol) return 0b00;
-            else if (pixel == mc1Col) return 0b01;
-            else if (pixel == mc2Col) return 0b10;
-            else return 0b11;
-        } else {
-            // mc sprite
-            if (pixel == bgCol) return 0b00;
-            else if (pixel == mc1Col) return 0b01;
-            else if (pixel == mc2Col) return 0b11;
-            else return 0b10;
-        }
+        if (pixel == c0) return 0b00;
+        if (c1 < 0) c1 = pixel;
+        if (pixel == c1) return 0b01;
+        if (c2 < 0) c2 = pixel;
+        if (pixel == c2) return (chOffset < 0) ? 0b11 : 0b10; // sprites are different
+        if (c3 < 0) c3 = pixel;
+        // color outside palette
+        return (chOffset < 0) ? 0b10 : 0b11; // sprites are different
     }
 
-    private int uniqueBits(int myPixelWidth) {
-        if (myPixelWidth == 1) return  0b1; // hires
-        else if (chOffset >= 0) return 0b11; // mc char
-        else return 0b10;                    // mc sprite
-    }
-
-    private int extractObject(int xoff, int yoff, int w, int h, byte[] buf, int myPixelWidth) {
+    private void extractObject(int xoff, int yoff, int w, int h, byte[] buf, int myPixelWidth) {
         int bufoffset = 0;
         int bitcount = 0;
-        int uniqueIndex = defaultCol;
-        int uniqueBits = uniqueBits(myPixelWidth);
+        c0 = bgCol; c1 = mc1Col; c2 = mc2Col; c3 = fgCol;
         int b = 0;
         for (int y = yoff; y < h + yoff; y++) {
             for (int x = xoff; x < w + xoff; x += myPixelWidth) {
                 int pixel = pixels.getSample(x, y, 0);
                 b <<= myPixelWidth;
                 int colorBits = (myPixelWidth > 1) ? pixelToBits2(pixel) : pixelToBits1(pixel);
-                if (colorBits == uniqueBits) {
-                    uniqueIndex = pixel;
-                }
                 b |= colorBits;
                 bitcount += myPixelWidth;
                 if (bitcount == 8) {
@@ -114,7 +102,6 @@ public class Sprite2asm {
                 }
             }
         }
-        return uniqueIndex;
     }
 
     // Heuristic:
@@ -240,7 +227,7 @@ public class Sprite2asm {
         for (int cy = 0; cy + 8 <= height; cy += 8) {
             for (int cx = 0; cx + 8 <= width; cx += 8) {
                 int detectedPixelWidth = (pixelWidth > 1 && isHiresChar(cx, cy)) ? 1 : pixelWidth;
-                int uniqueIndex = extractObject(cx, cy, 8, 8, curChar, detectedPixelWidth);
+                extractObject(cx, cy, 8, 8, curChar, detectedPixelWidth);
                 int ch = findInSet(curChar, charset, charsetSize);
                 if (ch == charsetSize) { // not found
                     System.arraycopy(curChar, 0, charset, charsetSize * 8, 8);
@@ -250,6 +237,7 @@ public class Sprite2asm {
                     charsetSize++;
                 }
                 // correct character color for mc
+                int uniqueIndex = (c3 < 0) ? defaultCol : c3;
                 if (pixelWidth > 1) {
                     uniqueIndex = (uniqueIndex & 0x07);
                     if (detectedPixelWidth > 1) {
