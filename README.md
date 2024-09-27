@@ -24,7 +24,7 @@ The following options can be put in the file name or given on the command line (
  The background color (set via `-bg`) is mapped to bit pattern `00`. Other colors map to the remaining bit pattern `10` for sprites or `11` for charsets.
 
  * `-syXX`:
- y-offset applied when converting sprites (defaults to 0). Useful when extracting sprite overlays.
+ y-offset in hex applied when converting sprites (defaults to 0). Useful when extracting sprite overlays.
 
 ### OUTPUT OPTIONS
 

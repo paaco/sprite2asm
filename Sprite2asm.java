@@ -26,7 +26,7 @@ public class Sprite2asm {
     // charset specifiers
     private static final Pattern CHPATTERN = Pattern.compile("-ch([0-9a-fA-F][0-9a-fA-F])"); // -chXX create charset
     // other specifiers
-    private static final Pattern SYPATTERN = Pattern.compile("-sy([0-9a-fA-F][0-9a-fA-F])"); // -syXX starting sprite y-offset
+    private static final Pattern SYPATTERN = Pattern.compile("-sy([0-9a-fA-F][0-9a-fA-F])"); // -syXX starting sprite y-offset in hex
 
     public static void main(String[] args) throws Exception {
         StringBuilder arguments = new StringBuilder();
@@ -48,18 +48,16 @@ public class Sprite2asm {
     private int height8;
     private String header;
 
-    private int pixelWidth = 1;  // defaults to hires (1=hires, 2=mc)
-    private int fgIndex = -1;    // disabled, takes prio over bgIndex
-    private int bgIndex = 0;     // black, but actually defaults to transparent index
-    private int mc1Index = 1;    // white
-    private int mc2Index = 2;    // red
-    private int defaultIndex = -1;// >= 0 enables charmap in charset mode
-    private int chOffset = -1;   // >= 0 enables charset mode, but default is sprites
-    private int syOffset = 0;    // sprite y-offset
+    private int pixelWidth = 1;  // Hires (1) or multicolor (2). Defaults to hires
+    private int fgCol = -1;      // Foreground color. Disabled by default, takes prio over bgCol
+    private int bgCol = -1;      // Background color. Defaults to transparent index (or -1 if no such color)
+    private int mc1Col = -1;     // Multicolor 1
+    private int mc2Col = -1;     // Multicolor 2
+    private int defaultCol = -1; // >= 0 enables charmap in charset mode
+    private int chOffset = -1;   // >= 0 enables charset mode. Default is sprites
+    private int syOffset = 0;    // Sprite y-offset
 
-    /** remaps retrieved pixel color to bit pattern */
-    // pixelWidth 1: fgIndex set: fgIndex is '1', any other color is '0' (background)
-    //                 otherwise: bgIndex is '0', any other color is '1' (char/sprite color)
+    /** Remaps pixel to hires bit pattern according to palette and updates palette information */
     private int pixelToBits1(int pixel) {
         if (fgIndex >= 0) {
             return (pixel == fgIndex) ? 0b1 : 0b0;
@@ -74,15 +72,15 @@ public class Sprite2asm {
     private int pixelToBits2(int pixel) {
         if (chOffset >= 0) {
             // mc char
-            if (pixel == bgIndex) return 0b00;
-            else if (pixel == mc1Index) return 0b01;
-            else if (pixel == mc2Index) return 0b10;
+            if (pixel == bgCol) return 0b00;
+            else if (pixel == mc1Col) return 0b01;
+            else if (pixel == mc2Col) return 0b10;
             else return 0b11;
         } else {
             // mc sprite
-            if (pixel == bgIndex) return 0b00;
-            else if (pixel == mc1Index) return 0b01;
-            else if (pixel == mc2Index) return 0b11;
+            if (pixel == bgCol) return 0b00;
+            else if (pixel == mc1Col) return 0b01;
+            else if (pixel == mc2Col) return 0b11;
             else return 0b10;
         }
     }
@@ -96,7 +94,7 @@ public class Sprite2asm {
     private int extractObject(int xoff, int yoff, int w, int h, byte[] buf, int myPixelWidth) {
         int bufoffset = 0;
         int bitcount = 0;
-        int uniqueIndex = defaultIndex;
+        int uniqueIndex = defaultCol;
         int uniqueBits = uniqueBits(myPixelWidth);
         int b = 0;
         for (int y = yoff; y < h + yoff; y++) {
@@ -134,8 +132,8 @@ public class Sprite2asm {
                 int pixel2 = pixels.getSample(x + xoff + 1, y + yoff, 0);
                 hiresColor = calcFgColor(hiresColor, pixel1);
                 hiresColor = calcFgColor(hiresColor, pixel2);
-                if ((pixel1 != bgIndex && pixel1 != hiresColor) ||
-                    (pixel2 != bgIndex && pixel2 != hiresColor)) {
+                if ((pixel1 != bgCol && pixel1 != hiresColor) ||
+                    (pixel2 != bgCol && pixel2 != hiresColor)) {
                     return false; // 3rd color detected
                 }
                 if (pixel1 != pixel2) {
@@ -148,7 +146,7 @@ public class Sprite2asm {
     }
 
     private int calcFgColor(int hiresColor, int pixel) {
-        return (hiresColor < 0 && pixel != bgIndex) ? pixel : hiresColor;
+        return (hiresColor < 0 && pixel != bgCol) ? pixel : hiresColor;
     }
 
     // extract tile from charmap (2*tileW*tileH bytes characters and color bytes)
@@ -166,19 +164,19 @@ public class Sprite2asm {
     private void updateSettings(String str) {
         Matcher bg = BGPATTERN.matcher(str);
         if (bg.find()) { // "-bgX" sets bg index and forces hires
-            bgIndex = Integer.parseInt(bg.group(1), 16);
+            bgCol = Integer.parseInt(bg.group(1), 16);
             pixelWidth = 1;
         }
         Matcher fg = FGPATTERN.matcher(str);
-        fgIndex = -1;
+        fgCol = -1;
         if (fg.find()) { // "-fgX" sets fg index and forces hires
-            fgIndex = Integer.parseInt(fg.group(1), 16);
+            fgCol = Integer.parseInt(fg.group(1), 16);
             pixelWidth = 1;
         }
         Matcher mc = MCPATTERN.matcher(str);
         if (mc.find()) { // -mcXX sets mc1 and mc2 indices and forces mc
-            mc1Index = Integer.parseInt(mc.group(1),16);
-            mc2Index = Integer.parseInt(mc.group(2),16);
+            mc1Col = Integer.parseInt(mc.group(1),16);
+            mc2Col = Integer.parseInt(mc.group(2),16);
             pixelWidth = 2;
         }
         Matcher ch = CHPATTERN.matcher(str);
@@ -192,9 +190,9 @@ public class Sprite2asm {
             syOffset = Integer.parseInt(sy.group(1),16);
         }
         Matcher cm = CMPATTERN.matcher(str);
-        defaultIndex = -1;
+        defaultCol = -1;
         if (cm.find()) { // -cmX enable colormap with default color
-            defaultIndex = Integer.parseInt(cm.group(1),16);
+            defaultCol = Integer.parseInt(cm.group(1),16);
         }
     }
 
@@ -204,8 +202,8 @@ public class Sprite2asm {
         if (!(image.getColorModel() instanceof IndexColorModel)) {
             throw new IOException("image should have palette");
         }
-        // pick bg from transparent color index
-        bgIndex = ((IndexColorModel) image.getColorModel()).getTransparentPixel();
+        // pick bg from transparent color index (-1 if not found)
+        bgCol = ((IndexColorModel) image.getColorModel()).getTransparentPixel();
         updateSettings(srcfilename + extraArguments);
         pixels = image.getData();
         width = pixels.getWidth();
@@ -294,7 +292,7 @@ public class Sprite2asm {
         sb.append(String.format("; charmap %d bytes (%d x %d)%n", width8 * height8, width8, height8));
         appendByteRows(sb, charmapBytes, width8 * height8, width8);
         flushOutputSB(sb, "charmap");
-        if (defaultIndex >= 0) {
+        if (defaultCol >= 0) {
             sb.append(String.format("; colormap %d bytes (%d x %d)%n", width8 * height8, width8, height8));
             appendByteRows(sb, colormap, width8 * height8, width8);
             flushOutputSB(sb, "colormap");
