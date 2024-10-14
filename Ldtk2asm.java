@@ -123,34 +123,33 @@ public class Ldtk2asm {
                             optimizedCharsetCount++;
                         }
                     }
-                    StringBuilder sb = graphics.getOutputSB();
-                    sb.append(String.format("; level: '%s', layer '%s', tileset '%s'%n", levelIdentifier, layerIdentifier, new File(tilesetPath).getName()));
-                    sb.append(String.format("; tilemap %d bytes (%d x %d)%n", width * height, width, height));
-                    Sprite2asm.appendByteRows(sb, tileMap, width * height, width);
-                    graphics.flushOutputSB(sb, "tilemap");
-                    sb.append(String.format("; tiles %d bytes %dx%d SoA %d x %d (%d uniques)%n",
+                    graphics.createOutput("tilemap");
+                    graphics.outputString(String.format("; level: '%s', layer '%s', tileset '%s'%n", levelIdentifier, layerIdentifier, new File(tilesetPath).getName()));
+                    graphics.outputString(String.format("; tilemap %d bytes (%d x %d)%n", width * height, width, height));
+                    graphics.appendByteRows(tileMap, width * height, width);
+                    graphics.createOutput("tiles");
+                    graphics.outputString(String.format("; tiles %d bytes %dx%d SoA %d x %d (%d uniques)%n",
                             tileSetCount * tileSize/2, tileWidth, tileWidth, tileSetCount, tileSize/2, tileSetCount));
                     byte[] tileRow = new byte[tileSetCount];
                     for (int c = 0; c < tileSize/2; c++) {
                         for (int i = 0; i < tileSetCount; i++) {
                             tileRow[i] = optimizedMap.get(tileSet[i * tileSize + c]);
                         }
-                        Sprite2asm.appendByteRows(sb, tileRow, tileSetCount, tileSetCount);
+                        graphics.appendByteRows(tileRow, tileSetCount, tileSetCount);
                     }
-                    graphics.flushOutputSB(sb, "tiles");
-                    sb.append(String.format("; colortiles %d bytes %dx%d SoA %d x %d (%d uniques)%n",
+                    graphics.createOutput("colortiles");
+                    graphics.outputString(String.format("; colortiles %d bytes %dx%d SoA %d x %d (%d uniques)%n",
                             tileSetCount * tileSize/2, tileWidth, tileWidth, tileSetCount, tileSize/2, tileSetCount));
                     for (int c = tileSize/2; c < tileSize; c++) {
                         for (int i = 0; i < tileSetCount; i++) {
                             tileRow[i] = (byte)tileSet[i * tileSize + c];
                         }
-                        Sprite2asm.appendByteRows(sb, tileRow, tileSetCount, tileSetCount);
+                        graphics.appendByteRows(tileRow, tileSetCount, tileSetCount);
                     }
-                    graphics.flushOutputSB(sb, "colortiles");
-                    sb.append(String.format("; charset %d bytes (%d uniques)%n", optimizedCharsetCount * 8, optimizedCharsetCount));
-                    sb.append(String.format("; NOTE tiles assume these chars start at index $%02x (offset %d)%n", chOffset, chOffset * 8));
-                    Sprite2asm.appendByteRows(sb, optimizedCharset, optimizedCharsetCount * 8, 8);
-                    graphics.flushOutputSB(sb, "charset");
+                    graphics.createOutput("charset");
+                    graphics.outputString(String.format("; charset %d bytes (%d uniques)%n", optimizedCharsetCount * 8, optimizedCharsetCount));
+                    graphics.outputString(String.format("; NOTE tiles assume these chars start at index $%02x (offset %d)%n", chOffset, chOffset * 8));
+                    graphics.appendByteRows(optimizedCharset, optimizedCharsetCount * 8, 8);
 
                 } else if (type.equals("Entities")) {
                     int gridSize = integer(layerInstance, "__gridSize"); // grid size in #pixels (square)
@@ -159,20 +158,19 @@ public class Ldtk2asm {
                     Map<Integer, String> entities = new HashMap<>();
                     for (Object entityInstance : entityInstances) {
                         Object[] px = array(entityInstance, "px"); // top-left coordinate
-                        int pxx = ((Long)px[0]).intValue() / gridSize;
+                        int pxx = ((Long) px[0]).intValue() / gridSize;
                         int width = integer(entityInstance, "width") / gridSize;
                         String identifier = string(entityInstance, "__identifier");
                         Object[] fieldInstances = array(entityInstance, "fieldInstances"); // list of entity properties
                         @SuppressWarnings("unchecked")
-                        String value = fieldInstances.length > 0 ? ((JsonObject<String, Object>)fieldInstances[0]).get("__value").toString() : "0";
+                        String value = fieldInstances.length > 0 ? ((JsonObject<String, Object>) fieldInstances[0]).get("__value").toString() : "0";
                         // TODO data as (byte) list so that it can be SoA instead
                         String data = String.format("!byte %d,%d,%s,%s%n", pxx, width, identifier, value);
-                        entities.put(pxx, entities.getOrDefault(pxx,"") + data); // append
+                        entities.put(pxx, entities.getOrDefault(pxx, "") + data); // append
                     }
-                    StringBuilder sb = graphics.getOutputSB();
-                    sb.append(String.format("; level: '%s', layer '%s'%n; xtile,width,entity,value%n", levelIdentifier, layerIdentifier));
-                    entities.keySet().stream().sorted().forEach(key -> sb.append(entities.get(key)));
-                    graphics.flushOutputSB(sb, "entities");
+                    graphics.createOutput("entities");
+                    graphics.outputString(String.format("; level: '%s', layer '%s'%n; xtile,width,entity,value%n", levelIdentifier, layerIdentifier));
+                    entities.keySet().stream().sorted().forEach(key -> graphics.outputString(entities.get(key)));
                 }
             }
         }

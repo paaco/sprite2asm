@@ -47,6 +47,7 @@ public class Sprite2asm {
     private int width8;
     private int height8;
     private String header;
+    private String baseName;
     private int c0; // palette color 0 (background)
     private int c1; // palette color 1 (mc1)
     private int c2; // palette color 2 (mc2)
@@ -273,17 +274,16 @@ public class Sprite2asm {
         for (int i = 0; i < width8 * height8; i++) {
             charmapBytes[i] = (byte) charmap[i];
         }
-        StringBuilder sb = getOutputSB();
-        sb.append(String.format("; charset %d bytes (%d uniques)%n", charsetSize * 8, charsetSize));
-        appendByteRows(sb, charset, charsetSize * 8, 8);
-        flushOutputSB(sb, "charset");
-        sb.append(String.format("; charmap %d bytes (%d x %d)%n", width8 * height8, width8, height8));
-        appendByteRows(sb, charmapBytes, width8 * height8, width8);
-        flushOutputSB(sb, "charmap");
+        createOutput("charset");
+        outputString(String.format("; charset %d bytes (%d uniques)%n", charsetSize * 8, charsetSize));
+        appendByteRows(charset, charsetSize * 8, 8);
+        createOutput("charmap");
+        outputString(String.format("; charmap %d bytes (%d x %d)%n", width8 * height8, width8, height8));
+        appendByteRows(charmapBytes, width8 * height8, width8);
         if (defaultCol >= 0) {
-            sb.append(String.format("; colormap %d bytes (%d x %d)%n", width8 * height8, width8, height8));
-            appendByteRows(sb, colormap, width8 * height8, width8);
-            flushOutputSB(sb, "colormap");
+            createOutput("colormap");
+            outputString(String.format("; colormap %d bytes (%d x %d)%n", width8 * height8, width8, height8));
+            appendByteRows(colormap, width8 * height8, width8);
         }
         if (charsetSize + chOffset > 256) {
             System.err.format("WARNING: charmap overflows with %d characters; use offset -ch%02X instead%n",
@@ -294,18 +294,17 @@ public class Sprite2asm {
     private void convertSprites() {
         int nr = 0;
         byte[] sprite = new byte[64];
-        StringBuilder sb = getOutputSB();
+        createOutput("sprites");
         for (int sy = syOffset; sy + 21 <= height; sy += 21) {
             for (int sx = 0; sx + 24 <= width; sx += 24) {
                 extractObject(sx, sy, 24, 21, sprite, pixelWidth);
                 if (containsAnyBits(sprite)) {
-                    sb.append(String.format("; %d (%d,%d)%n", nr, sx, sy));
-                    appendByteRows(sb, sprite, 64, 21);
+                    outputString(String.format("; %d (%d,%d)%n", nr, sx, sy));
+                    appendByteRows(sprite, 64, 21);
                     nr++;
                 }
             }
         }
-        flushOutputSB(sb, "sprites");
     }
 
     private boolean containsAnyBits(byte[] block) {
@@ -317,17 +316,17 @@ public class Sprite2asm {
         return false;
     }
 
-    static void appendByteRows(StringBuilder sb, byte[] input, int len, int wrap) {
+    void appendByteRows(byte[] input, int len, int wrap) {
         int i = 0;
         while (i < len) {
-            sb.append(i % wrap == 0 ? PREFIX : ",");
-            sb.append(String.format("$%1$02x", input[i++]));
+            outputString(i % wrap == 0 ? PREFIX : ",");
+            outputString(String.format("$%1$02x", input[i++]));
             if (i % wrap == 0) {
-                sb.append("\n");
+                outputString("\n");
             }
         }
         if (i % wrap != 0) {
-            sb.append("\n");
+            outputString("\n");
         }
     }
 
@@ -347,22 +346,24 @@ public class Sprite2asm {
     }
 
     void setHeader(String program, String arguments, String srcpath) {
+        baseName = new File(srcpath).getName()
+                .replaceFirst("\\.\\w+$","") // remove extension
+                .replaceAll("-\\w*","");     // remove -[a-z0-9]
         header = String.format("; %s %s'%s' on %s%n",
                 program,
                 arguments.isEmpty() ? "" : arguments + " ",
-                new File(srcpath).getName(),
+                baseName,
                 new SimpleDateFormat("dd-MMM-yyyy HH:mm:ss", Locale.ENGLISH).format(new Date()));
 
     }
 
-    StringBuilder getOutputSB() {
-        return new StringBuilder(header);
+    void createOutput(String tag) {
+        System.out.printf("%n%s_%s.bin%n%n",baseName,tag);
+        System.out.print(header);
     }
 
-    void flushOutputSB(StringBuilder sb, String tag) {
-        System.out.println(sb);
-        sb.setLength(0);
-        sb.append(header);
+    void outputString(String str) {
+        System.out.print(str);
     }
 
 }
