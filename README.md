@@ -35,6 +35,10 @@ The following options can be put in the file name or given on the command line (
    * `-cmX`:
    together with `-ch`, also generate colormap with `X` as color when a character is empty or only contains multi colors. 
 
+* `-bin`:
+  generates binary output files (default is source code). File names are derived from the input file name,
+  e.g. converting `filename-ch00-bg0.png` will create `filename_charset.bin` and `filename_charmap.bin`.
+
 Options on the command line take priority over those in the file name.
 
 Example: `java Sprite2asm -mcXY file1-ch07.png file2.png` will interpret asset `file1-ch07.png` as multicolor and convert it to charset and charmap, where bytes in the charmap start at `7`.

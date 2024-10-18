@@ -3,6 +3,7 @@ import java.awt.image.BufferedImage;
 import java.awt.image.IndexColorModel;
 import java.awt.image.Raster;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
@@ -27,6 +28,7 @@ public class Sprite2asm {
     private static final Pattern CHPATTERN = Pattern.compile("-ch([0-9a-fA-F][0-9a-fA-F])"); // -chXX create charset
     // other specifiers
     private static final Pattern SYPATTERN = Pattern.compile("-sy([0-9a-fA-F][0-9a-fA-F])"); // -syXX starting sprite y-offset in hex
+    private static final Pattern BINPATTERN = Pattern.compile("-bin"); // -bin output to binary files
 
     public static void main(String[] args) throws Exception {
         StringBuilder arguments = new StringBuilder();
@@ -48,6 +50,7 @@ public class Sprite2asm {
     private int height8;
     private String header;
     private String baseName;
+    private FileOutputStream fileOutput;
     private int c0; // palette color 0 (background)
     private int c1; // palette color 1 (mc1)
     private int c2; // palette color 2 (mc2)
@@ -61,6 +64,7 @@ public class Sprite2asm {
     private int defaultCol = -1; // >= 0 enables charmap in charset mode
     private int chOffset = -1;   // >= 0 enables charset mode. Default is sprites
     private int syOffset = 0;    // Sprite y-offset
+    private boolean binary = false; // Output binary files. Defaults to source code
 
     /** Remaps pixel to hires bit pattern according to palette and updates palette information */
     private int pixelToBits1(int pixel) {
@@ -182,6 +186,8 @@ public class Sprite2asm {
         if (cm.find()) { // -cmX enable colormap with default color
             defaultCol = Integer.parseInt(cm.group(1),16);
         }
+        Matcher bin = BINPATTERN.matcher(str);
+        binary = bin.find(); // -bin output to binary files
     }
 
     void load(String srcfilename, String extraArguments) throws IOException {
@@ -317,6 +323,22 @@ public class Sprite2asm {
     }
 
     void appendByteRows(byte[] input, int len, int wrap) {
+        if (fileOutput != null) {
+            writeByteRows(input, len);
+        } else {
+            printByteRows(input, len, wrap);
+        }
+    }
+
+    private void writeByteRows(byte[] input, int len) {
+        try {
+            fileOutput.write(input, 0, len);
+        } catch (IOException e) {
+            System.err.format("ERROR: writing to file: %s", e.getMessage());
+        }
+    }
+
+    private void printByteRows(byte[] input, int len, int wrap) {
         int i = 0;
         while (i < len) {
             outputString(i % wrap == 0 ? PREFIX : ",");
@@ -346,19 +368,27 @@ public class Sprite2asm {
     }
 
     void setHeader(String program, String arguments, String srcpath) {
-        baseName = new File(srcpath).getName()
-                .replaceFirst("\\.\\w+$","") // remove extension
-                .replaceAll("-\\w*","");     // remove -[a-z0-9]
         header = String.format("; %s %s'%s' on %s%n",
                 program,
                 arguments.isEmpty() ? "" : arguments + " ",
-                baseName,
+                new File(srcpath).getName(),
                 new SimpleDateFormat("dd-MMM-yyyy HH:mm:ss", Locale.ENGLISH).format(new Date()));
-
+        baseName = new File(srcpath).getName()
+                .replaceFirst("\\.\\w+$","") // remove extension
+                .replaceAll("-\\w*","");     // remove -[a-z0-9]*
     }
 
     void createOutput(String tag) {
-        System.out.printf("%n%s_%s.bin%n%n",baseName,tag);
+        fileOutput = null;
+        if (binary) {
+            String fname = String.format("%s_%s.bin", baseName, tag);
+            try {
+                fileOutput = new FileOutputStream(fname);
+                System.out.println(fname);
+            } catch (IOException e) {
+                System.err.format("ERROR: unable to create file %s: %s", fname, e.getMessage());
+            }
+        }
         System.out.print(header);
     }
 
